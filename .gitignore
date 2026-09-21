@@ -1,6 +1,7 @@
 .gradle/
 build/
 target/
+.flattened-pom.xml
 .kotlin/
 .idea/
 *.iml

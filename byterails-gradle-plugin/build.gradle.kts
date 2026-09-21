@@ -12,6 +12,8 @@ description = "byterails Gradle plugin: checks compiled classes against byterail
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+    withJavadocJar()
 }
 
 kotlin {
@@ -44,6 +46,8 @@ dependencies {
 }
 
 gradlePlugin {
+    website.set("https://github.com/flock-community/byterails")
+    vcsUrl.set("https://github.com/flock-community/byterails")
     testSourceSets(functionalTest)
     plugins {
         create("byterails") {
@@ -51,6 +55,7 @@ gradlePlugin {
             implementationClass = "community.flock.byterails.gradle.ByterailsPlugin"
             displayName = "byterails"
             description = "Whitelist-based architecture guardrails checked on bytecode"
+            tags.set(listOf("architecture", "guardrails", "bytecode", "kotlin"))
         }
     }
 }

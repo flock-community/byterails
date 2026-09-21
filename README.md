@@ -10,6 +10,23 @@ named. Anything the file does not mention is a violation.
 Because it works on class files, one rule set covers Kotlin, Java and any other JVM language in the
 same module, and the references it checks are the ones the compiler actually emitted.
 
+## Installing
+
+The artifacts are published to Maven Central under the group `community.flock.byterails`:
+`byterails-core`, `byterails-gradle-plugin` with the plugin id `community.flock.byterails`, and
+`byterails-maven-plugin`. The Gradle plugin is resolved from Maven Central rather than the plugin
+portal, so add it to the plugin repositories once:
+
+```kotlin
+// settings.gradle.kts
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+```
+
 ## The rules file
 
 ```kotlin
@@ -269,6 +286,17 @@ reference is found, runs the Gradle plugin against real builds with TestKit, and
 `byterails-core` against this repository's own [`byterails.kts`](byterails.kts). The Maven plugin is
 built by Maven, because its descriptor comes from Maven's plugin tooling, and runs its integration
 tests against sample projects with the invoker plugin.
+
+## Releasing
+
+Publishing a GitHub release runs the deploy workflow, which builds, tests and publishes the core, the
+Gradle plugin and the Maven plugin to Maven Central under the release tag, with a leading `v`
+dropped. Every push to `main` publishes the `-SNAPSHOT` version from `gradle.properties` to the
+Central snapshot repository, and the workflow can be dispatched by hand with a version. It needs four
+repository secrets: `SONATYPE_USERNAME` and `SONATYPE_PASSWORD`, a Central Portal user token, and
+`GPG_PRIVATE_KEY` and `GPG_PASSPHRASE` for signing. The Gradle side uses the Nexus publish plugin
+against the Central Portal's staging API; the Maven side uses the Central publishing plugin with the
+`release` profile. Both sign with the same key.
 
 ## Status
 

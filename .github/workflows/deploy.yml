@@ -1,0 +1,90 @@
+# Publishes byterails-core, the Gradle plugin and the Maven plugin to Maven Central.
+#
+#   push to main        -> the SNAPSHOT version from gradle.properties, to the Central snapshot repository
+#   GitHub release      -> the release tag (a leading "v" is dropped), released on Maven Central
+#   manual dispatch     -> the version typed in
+#
+# Secrets, the same names kmapper uses: SONATYPE_USERNAME and SONATYPE_PASSWORD (a Central Portal
+# user token), GPG_PRIVATE_KEY (ASCII-armored private key) and GPG_PASSPHRASE.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Determine version
+        run: |
+          case "${{ github.event_name }}" in
+            release)          VERSION="${{ github.event.release.tag_name }}" ;;
+            workflow_dispatch) VERSION="${{ github.event.inputs.version }}" ;;
+            *)                VERSION="$(grep '^version=' gradle.properties | cut -d= -f2)" ;;
+          esac
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Deploying byterails $VERSION"
+
+      - name: Build and test
+        run: ./gradlew build -Pversion="$VERSION"
+
+      - name: Publish core and Gradle plugin to Maven Central
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: ./gradlew -Pversion="$VERSION" publishToSonatype closeAndReleaseSonatypeStagingRepository
+
+      - name: Publish core locally for the Maven plugin build
+        run: ./gradlew -Pversion="$VERSION" publishToMavenLocal
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Maven settings
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<'SETTINGS'
+          <settings>
+            <servers>
+              <server>
+                <id>central</id>
+                <username>${env.SONATYPE_USERNAME}</username>
+                <password>${env.SONATYPE_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          SETTINGS
+
+      - name: Publish Maven plugin to Maven Central
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: mvn -B -f byterails-maven-plugin/pom.xml -Drevision="$VERSION" -Prelease deploy
