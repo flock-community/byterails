@@ -76,6 +76,47 @@ The file is validated before any class file is read. Duplicate declarations, cla
 allows that can never apply, and malformed prefixes fail the build with the line that caused it.
 Cycles between declared packages and Kotlin package names that compile to Java ones are warnings.
 
+## Slices
+
+An application cut into vertical slices, each with the same internal structure, declares that
+structure once:
+
+```kotlin
+byterails {
+    allow("kotlin")
+    allow("java.lang")
+    allow("org.jetbrains.annotations")
+
+    slices("com.acme") {
+        slice("orders")
+        slice("customers")
+        slice("shipping")
+
+        exported("api")            // every slice may use the api package of every other slice
+        allow("org.slf4j")         // rules of each slice root, inherited by its packages
+
+        pkg("api")
+        pkg("domain")
+        pkg("application") {
+            allow("domain")
+            allow("api")
+        }
+        pkg("infra") {
+            allow("domain")
+            exclusive("org.jooq")   // owned by the infra package of every slice, and by nothing else
+        }
+    }
+}
+```
+
+This declares `com.acme.orders`, `com.acme.orders.domain` and so on for each slice. Template rules are
+relative to the slice: `allow("domain")` in `orders` means `com.acme.orders.domain`, while a prefix that
+points outside the template, such as `org.slf4j`, is taken as written. Slices cannot see each other,
+because nothing allows them to, except through exported packages. An exclusive in the template is
+owned by that package of every slice together, so the slices' copies never clash with each other and
+still deny the library to everything outside the slices. Without a root, `slices { }` puts the slices at
+the top of the tree or under the base package.
+
 ## Gradle
 
 ```kotlin

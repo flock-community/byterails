@@ -8,6 +8,7 @@ import community.flock.byterails.model.Prefix
 import community.flock.byterails.model.Rule
 import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
+import community.flock.byterails.model.SliceTemplate
 import community.flock.byterails.model.SourceLocation
 
 @DslMarker
@@ -41,7 +42,73 @@ class ByterailsBuilder internal constructor() {
         packages += PackageBuilder(parsePrefix(name, location), location).apply(block).build()
     }
 
+    /**
+     * Declares sibling packages under [root] that share one structure: the template in [block].
+     * Without a root the slices sit at the top of the package tree, or under the base package.
+     */
+    fun slices(root: String = "", block: SlicesBuilder.() -> Unit) {
+        val location = SourceLocation.capture()
+        val prefix = if (root.isBlank()) Prefix.ROOT else parsePrefix(root, location)
+        val template = SlicesBuilder(prefix, location).apply(block).build()
+        if (template.slices.isEmpty()) throw ConfigException("slices(\"${prefix.name}\") names no slice; add slice(\"...\")", location)
+        packages += template.expand()
+    }
+
     fun build(): RuleSet = RuleSet(rootRules.toList(), packages.toList())
+}
+
+@ByterailsDsl
+class SlicesBuilder internal constructor(
+    private val root: Prefix,
+    private val location: SourceLocation?,
+) {
+    private val slices = mutableListOf<Prefix>()
+    private val exported = mutableListOf<Prefix>()
+    private val rules = mutableListOf<Rule>()
+    private var naming: NamingRules? = null
+    private val packages = mutableListOf<PackageDeclaration>()
+
+    /** One slice: a sub-package of the root that receives the whole template. */
+    fun slice(name: String) {
+        slices += parsePrefix(name, SourceLocation.capture())
+    }
+
+    /** A template package every slice may reference in every other slice, for example `api`. */
+    fun exported(name: String) {
+        exported += parsePrefix(name, SourceLocation.capture())
+    }
+
+    /** Rules of the slice root itself, inherited by the slice's packages. */
+    fun allow(prefix: String) {
+        rules += rule(RuleKind.ALLOW, prefix)
+    }
+
+    fun deny(prefix: String) {
+        rules += rule(RuleKind.DENY, prefix)
+    }
+
+    /** Owned by the root of every slice together, and by nothing outside the slices. */
+    fun exclusive(prefix: String) {
+        rules += rule(RuleKind.EXCLUSIVE, prefix)
+    }
+
+    /** Naming for classes directly in a slice root. */
+    fun naming(block: NamingBuilder.() -> Unit) {
+        val location = SourceLocation.capture()
+        if (naming != null) throw ConfigException("slices(\"${root.name}\") has more than one naming block", location)
+        val patterns = NamingBuilder().apply(block).patterns
+        if (patterns.isEmpty()) throw ConfigException("naming block of slices(\"${root.name}\") has no patterns", location)
+        naming = NamingRules(patterns, location)
+    }
+
+    /** A package of the template, relative to each slice: `pkg("domain")` is `<slice>.domain`. */
+    fun pkg(name: String, block: PackageBuilder.() -> Unit = {}) {
+        val location = SourceLocation.capture()
+        packages += PackageBuilder(parsePrefix(name, location), location).apply(block).build()
+    }
+
+    internal fun build(): SliceTemplate =
+        SliceTemplate(root, slices.toList(), exported.toList(), rules.toList(), naming, packages.toList(), location)
 }
 
 @ByterailsDsl

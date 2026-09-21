@@ -63,6 +63,15 @@ class BasePackageTest {
             pkg("app.infra.persistence") { allow("app.domain"); allow("lib.persistence"); exclusive("lib.jooq") }
             pkg("app.infra.web") { allow("app.application"); exclusive("lib.web"); naming { endsWith("Controller"); endsWith("Advice") } }
             pkg("app.javainterop")
+            slices("slices") {
+                slice("orders")
+                slice("customers")
+                exported("api")
+                pkg("api")
+                pkg("domain")
+                pkg("application") { allow("domain"); allow("api") }
+                pkg("infra") { allow("domain"); exclusive("lib.messaging") }
+            }
         }.withBasePackage("fixtures")
         val result = Byterails.check(rules, Fixtures.classDirs)
         val expected = Byterails.check(Fixtures.rules(), Fixtures.classDirs)

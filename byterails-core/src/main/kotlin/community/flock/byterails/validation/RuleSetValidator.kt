@@ -56,6 +56,7 @@ object RuleSetValidator {
                 val a = exclusives[i]
                 val b = exclusives[j]
                 if (a.origin === b.origin) continue
+                if (a.rule.group != null && a.rule.group == b.rule.group) continue
                 val overlap = a.rule.prefix.covers(b.rule.prefix) || b.rule.prefix.covers(a.rule.prefix)
                 if (!overlap) continue
                 val aOwner = a.origin!!
@@ -98,14 +99,13 @@ object RuleSetValidator {
             declaration.rules.filter { it.kind == RuleKind.ALLOW }.map { EffectiveRule(it, declaration) }
         }
         for (allow in allAllows) {
-            for (exclusive in resolved.exclusives) {
-                val owner = exclusive.origin!!
-                if (!exclusive.rule.prefix.covers(allow.rule.prefix)) continue
-                if (resolved.isInside(allow.origin, owner)) continue
-                if (!reported.add(allow.rule to exclusive.rule)) continue
+            for (group in resolved.exclusiveGroups) {
+                if (!group.prefix.covers(allow.rule.prefix)) continue
+                if (resolved.isInside(allow.origin, group)) continue
+                if (!reported.add(allow.rule to group.rule)) continue
                 problems += error(
-                    "${allow.rule.text} in ${describe(allow)} can never apply: \"${owner.name}\" owns it through " +
-                        "${exclusive.rule.text} (${exclusive.rule.location ?: "unknown location"})",
+                    "${allow.rule.text} in ${describe(allow)} can never apply: ${group.ownerDescription} owns it through " +
+                        "${group.rule.text} (${group.rule.location ?: "unknown location"})",
                     allow.rule.location,
                 )
             }
@@ -142,7 +142,7 @@ object RuleSetValidator {
         val index = declarations.withIndex().associate { (i, d) -> d to i }
         val edges = declarations.map { from ->
             val targets = resolved.effectiveRules(from)
-                .filter { it.rule.kind != RuleKind.DENY }
+                .filter { it.rule.kind != RuleKind.DENY && !it.rule.isExported }
                 .map { it.rule.prefix }
             declarations.filter { to ->
                 to !== from && targets.any { it.covers(to.prefix) || to.prefix.covers(it) }

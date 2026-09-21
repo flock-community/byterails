@@ -53,11 +53,12 @@ class Checker(ruleSet: RuleSet, private val warnings: List<ConfigProblem> = empt
         val target = reference.target
         if (declaration.prefix.covers(target)) return null
 
-        resolved.exclusives.firstOrNull { it.rule.prefix.covers(target) && !resolved.isInside(declaration, it.origin!!) }
-            ?.let { exclusive ->
-                return violation(
-                    ViolationKind.EXCLUSIVE, cls, reference, exclusive,
-                    "${cls.name} references $target, which \"${exclusive.originName}\" owns through ${exclusive.rule.text}",
+        resolved.exclusiveGroups.firstOrNull { it.prefix.covers(target) && !resolved.isInside(declaration, it) }
+            ?.let { group ->
+                return Violation(
+                    ViolationKind.EXCLUSIVE, cls.name, reference.site, reference.line, target,
+                    RuleRef(group.rule.text, group.owners[0].name, group.rule.location), emptyList(), cls.sourceFile,
+                    "${cls.name} references $target, which ${group.ownerDescription} owns through ${group.rule.text}",
                 )
             }
 

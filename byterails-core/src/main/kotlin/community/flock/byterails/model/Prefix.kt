@@ -37,6 +37,9 @@ class Prefix private constructor(val segments: List<String>) : Comparable<Prefix
     override fun toString(): String = name
 
     companion object {
+        /** The empty prefix: the root of every package tree. */
+        val ROOT: Prefix = Prefix(emptyList())
+
         /**
          * Parses [text] into a prefix.
          *

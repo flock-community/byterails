@@ -19,9 +19,25 @@ enum class RuleKind(val keyword: String) {
     EXCLUSIVE("exclusive"),
 }
 
-data class Rule(val kind: RuleKind, val prefix: Prefix, val location: SourceLocation?) {
+data class Rule(
+    val kind: RuleKind,
+    val prefix: Prefix,
+    val location: SourceLocation?,
+    /**
+     * Rules that one template line expanded into share a group. Exclusives of one group are owned
+     * together, so every slice's copy permits the others; groups starting with `exported:` are the
+     * allows a slice template derives for exported packages and are left out of cycle detection.
+     */
+    val group: String? = null,
+) {
     /** The rule as it was written, `deny("jakarta.persistence")`. */
     val text: String get() = "${kind.keyword}(\"${prefix.name}\")"
+
+    val isExported: Boolean get() = group?.startsWith(EXPORTED_GROUP) == true
+
+    companion object {
+        const val EXPORTED_GROUP = "exported:"
+    }
 }
 
 sealed interface NamePattern {

@@ -5,6 +5,17 @@ data class EffectiveRule(val rule: Rule, val origin: PackageDeclaration?) {
     val originName: String get() = origin?.name ?: "root"
 }
 
+/** One exclusive claim and every declaration that holds it. */
+data class ExclusiveGroup(val rule: Rule, val owners: List<PackageDeclaration>) {
+    val prefix: Prefix get() = rule.prefix
+
+    /** `"com.acme.orders.infra" and 2 more slices` for a grouped exclusive, or the one owner. */
+    val ownerDescription: String get() = when (owners.size) {
+        1 -> "\"${owners[0].name}\""
+        else -> "\"${owners[0].name}\" and ${owners.size - 1} more slices"
+    }
+}
+
 /**
  * A [RuleSet] with inheritance resolved: which declaration owns a package, which rules apply to it,
  * and which exclusives exist anywhere.
@@ -17,6 +28,13 @@ class ResolvedRuleSet(val ruleSet: RuleSet) {
     val exclusives: List<EffectiveRule> = declarations.flatMap { declaration ->
         declaration.rules.filter { it.kind == RuleKind.EXCLUSIVE }.map { EffectiveRule(it, declaration) }
     }
+
+    /** Exclusives grouped by ownership: a template line owns its prefix in every slice at once. */
+    val exclusiveGroups: List<ExclusiveGroup> = exclusives
+        .withIndex()
+        .groupBy { (index, exclusive) -> exclusive.rule.group ?: "#$index" }
+        .values
+        .map { members -> ExclusiveGroup(members.first().value.rule, members.map { it.value.origin!! }) }
 
     private val effectiveRulesByDeclaration = HashMap<PackageDeclaration, List<EffectiveRule>>()
 
@@ -38,6 +56,10 @@ class ResolvedRuleSet(val ruleSet: RuleSet) {
             ruleSet.rootRules.map { EffectiveRule(it, null) } +
                 chain(declaration).flatMap { enclosing -> enclosing.rules.map { EffectiveRule(it, enclosing) } }
         }
+
+    /** True when [declaration] lies inside a subtree owned by [group]. */
+    fun isInside(declaration: PackageDeclaration?, group: ExclusiveGroup): Boolean =
+        group.owners.any { isInside(declaration, it) }
 
     /** True when [declaration] lies inside the subtree owned by [owner], the owner itself included. */
     fun isInside(declaration: PackageDeclaration?, owner: PackageDeclaration): Boolean =

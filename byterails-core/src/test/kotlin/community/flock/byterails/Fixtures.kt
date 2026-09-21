@@ -58,5 +58,21 @@ object Fixtures {
         }
 
         pkg("fixtures.app.javainterop")
+
+        slices("fixtures.slices") {
+            slice("orders")
+            slice("customers")
+            exported("api")
+            pkg("api")
+            pkg("domain")
+            pkg("application") {
+                allow("domain")
+                allow("api")
+            }
+            pkg("infra") {
+                allow("domain")
+                exclusive("fixtures.lib.messaging")
+            }
+        }
     }
 }
