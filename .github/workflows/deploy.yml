@@ -57,8 +57,22 @@ jobs:
       - name: Build and test
         run: ./gradlew build -Pversion="$VERSION"
 
+      # A release version that is already on Maven Central is skipped, so a run that fails halfway
+      # can be repeated and finishes the half that is missing instead of being rejected as a duplicate.
+      - name: Check what this version already has on Maven Central
+        run: |
+          base="https://repo1.maven.org/maven2/community/flock/byterails"
+          probe() { curl -sS -o /dev/null -w '%{http_code}' "$base/$1/$VERSION/$1-$VERSION.pom"; }
+          case "$VERSION" in
+            *-SNAPSHOT) gradle=404; maven=404 ;;
+            *) gradle="$(probe byterails-core)"; maven="$(probe byterails-maven-plugin)" ;;
+          esac
+          echo "GRADLE_PUBLISHED=$([ "$gradle" = 200 ] && echo true || echo false)" >> "$GITHUB_ENV"
+          echo "MAVEN_PUBLISHED=$([ "$maven" = 200 ] && echo true || echo false)" >> "$GITHUB_ENV"
+          echo "core on Central: $gradle, maven plugin on Central: $maven"
+
       - name: Publish core and Gradle plugin to Maven Central
-        if: github.event.inputs.components != 'maven'
+        if: github.event.inputs.components != 'maven' && env.GRADLE_PUBLISHED != 'true'
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
@@ -69,17 +83,17 @@ jobs:
         run: ./gradlew -Pversion="$VERSION" --no-configuration-cache publishToSonatype closeAndReleaseSonatypeStagingRepository
 
       - name: Publish core locally for the Maven plugin build
-        if: github.event.inputs.components != 'gradle'
+        if: github.event.inputs.components != 'gradle' && env.MAVEN_PUBLISHED != 'true'
         run: ./gradlew -Pversion="$VERSION" --no-configuration-cache publishToMavenLocal
 
       - name: Import GPG key
-        if: github.event.inputs.components != 'gradle'
+        if: github.event.inputs.components != 'gradle' && env.MAVEN_PUBLISHED != 'true'
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
 
       - name: Maven settings
-        if: github.event.inputs.components != 'gradle'
+        if: github.event.inputs.components != 'gradle' && env.MAVEN_PUBLISHED != 'true'
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml <<'SETTINGS'
@@ -95,7 +109,7 @@ jobs:
           SETTINGS
 
       - name: Publish Maven plugin to Maven Central
-        if: github.event.inputs.components != 'gradle'
+        if: github.event.inputs.components != 'gradle' && env.MAVEN_PUBLISHED != 'true'
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
