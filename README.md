@@ -147,6 +147,11 @@ classes of their own, so lambda and coroutine bodies are covered.
 - **Multiplatform.** Only JVM targets produce class files.
 - **Members.** Rules see types, not members. Banning a class bans every use of it.
 
+## Design
+
+The product requirements, the rule model with its evaluation order, the decisions log and the open
+questions are in [docs/PRD.md](docs/PRD.md).
+
 ## Building
 
 ```
