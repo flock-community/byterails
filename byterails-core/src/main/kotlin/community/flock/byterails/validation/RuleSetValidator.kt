@@ -87,9 +87,12 @@ object RuleSetValidator {
             for (deny in rootDenies) shadowedByDeny(allow, deny, reported, problems)
         }
         for (declaration in resolved.declarations) {
-            val chain = resolved.chain(declaration)
-            val enclosingDenies = rootDenies + chain.flatMap { enclosing ->
-                enclosing.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, enclosing) }
+            val enclosingDenies = if (declaration.isolated) {
+                declaration.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, declaration) }
+            } else {
+                rootDenies + resolved.chain(declaration).flatMap { enclosing ->
+                    enclosing.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, enclosing) }
+                }
             }
             declaration.rules.filter { it.kind == RuleKind.ALLOW }.forEach { rule ->
                 val allow = EffectiveRule(rule, declaration)

@@ -1,6 +1,7 @@
 package community.flock.byterails.dsl
 
 import community.flock.byterails.model.ConfigException
+import community.flock.byterails.model.DefaultRules
 import community.flock.byterails.model.NamePattern
 import community.flock.byterails.model.NamingRules
 import community.flock.byterails.model.PackageDeclaration
@@ -53,6 +54,11 @@ class ByterailsBuilder internal constructor() {
         sliceTemplate = SliceBuilder(location).apply(block).build()
     }
 
+    /** The hexagonal default rules: a `domain` package under the base package without external dependencies. */
+    fun hexagonal() {
+        packages += DefaultRules.HEXAGONAL.declarations(SourceLocation.capture())
+    }
+
     fun build(): RuleSet = RuleSet(rootRules.toList(), packages.toList(), sliceTemplate)
 }
 
@@ -97,6 +103,11 @@ class SliceBuilder internal constructor(private val location: SourceLocation?) {
         packages += PackageBuilder(parsePrefix(name, location), location).apply(block).build()
     }
 
+    /** The hexagonal default rules: a `domain` package in every slice without external dependencies. */
+    fun hexagonal() {
+        packages += DefaultRules.HEXAGONAL.declarations(SourceLocation.capture())
+    }
+
     internal fun build(): SliceTemplate = SliceTemplate(exported.toList(), rules.toList(), naming, packages.toList(), location)
 }
 
@@ -107,6 +118,15 @@ class PackageBuilder internal constructor(
 ) {
     private val rules = mutableListOf<Rule>()
     private var naming: NamingRules? = null
+    private var isolated = false
+
+    /**
+     * Inherit nothing: not the root block, not enclosing declarations. Classes in this subtree may
+     * reference only what this block lists and the subtree itself.
+     */
+    fun isolated() {
+        isolated = true
+    }
 
     /** Permits references from this subtree to anything under [prefix]. */
     fun allow(prefix: String) {
@@ -132,7 +152,7 @@ class PackageBuilder internal constructor(
         naming = NamingRules(patterns, location)
     }
 
-    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location)
+    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location, isolated)
 }
 
 @ByterailsDsl

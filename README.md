@@ -126,6 +126,29 @@ that package of every slice together, so the slices' copies never clash and the 
 outside the slices. A rules file with a `slice { }` block and no configured slices fails to load, and
 so does a build that names slices for a file without one, so the two sides cannot drift apart.
 
+## Default rules
+
+byterails ships rule sets you can apply by name, from the rules file or from the build, and a build
+with default rules needs no rules file at all:
+
+```kotlin
+// build.gradle.kts
+byterails {
+    basePackage.set("com.acme")
+    slices.set(listOf("orders", "customers"))
+    defaultRules.set(listOf("hexagonal"))
+}
+```
+
+| Id | What it declares |
+| --- | --- |
+| `hexagonal` | A `domain` package, in every slice or under the base package, that cannot have any external dependency. It is isolated, so it inherits nothing from the root block or an enclosing declaration, and may reference only the language baseline (`kotlin`, `org.jetbrains.annotations`, `java.lang`, `java.util`, `java.time`, `java.math`, `java.text`) and itself. |
+
+The same rule set is `hexagonal()` in the rules file, at the top level or inside `slice { }`. The
+building block behind it is available on any package: `pkg("domain") { isolated(); allow("kotlin") }`
+inherits nothing and allows exactly what it lists. Maven takes `<defaultRules>` or
+`-Dbyterails.defaultRules=hexagonal`; the CLI takes `--default-rules`.
+
 ## Gradle
 
 ```kotlin
@@ -158,7 +181,7 @@ byterails: 2 violations in 1,204 classes, 17 packages
 A project whose packages all live under one root can set `byterails { basePackage.set("com.acme") }`
 and write the rules file relative to it: `pkg("domain")` then means `com.acme.domain`. A rule prefix
 is prefixed too when it points into the declared package tree, so `allow("domain")` becomes
-`allow("com.acme.domain")` while `allow("kotlin")` stays as written. The CLI takes `--base-package` and `--slices`.
+`allow("com.acme.domain")` while `allow("kotlin")` stays as written. The CLI takes `--base-package`, `--slices` and `--default-rules`.
 
 While adopting byterails on an existing code base, `-Pbyterails.reportOnly=true` prints every
 violation and keeps the build green. The same switch is available as `byterails { reportOnly = true }`.
@@ -189,7 +212,7 @@ The `check` goal runs in the `verify` phase and reads the module's compiled clas
 `byterails.kts` in the multi-module root directory. Each module checks its own classes, violations
 fail the build, and the JSON report lands in `target/byterails/violations.json`. Properties:
 `-Dbyterails.reportOnly=true`, `-Dbyterails.skip=true`, `-Dbyterails.rulesFile=...`,
-`-Dbyterails.basePackage=...` and `-Dbyterails.slices=...`. The same rules file gives the same result from Gradle and Maven,
+`-Dbyterails.basePackage=...`, `-Dbyterails.slices=...` and `-Dbyterails.defaultRules=...`. The same rules file gives the same result from Gradle and Maven,
 because both call the same core.
 
 ## Command line and library

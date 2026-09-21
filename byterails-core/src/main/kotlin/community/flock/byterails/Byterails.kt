@@ -8,6 +8,7 @@ import community.flock.byterails.model.ConfigProblem
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.Severity
 import community.flock.byterails.model.withBasePackage
+import community.flock.byterails.model.withDefaultRules
 import community.flock.byterails.model.withSlices
 import community.flock.byterails.report.ConsoleReporter
 import community.flock.byterails.report.JsonReporter
@@ -24,9 +25,24 @@ object Byterails {
      *
      * @param basePackage an optional package every declaration in the file is relative to; see [withBasePackage].
      * @param slices the slices the file's `slice { }` block applies to, relative to the base package; see [withSlices].
+     * @param defaultRules ids of the rule sets byterails ships, see [DefaultRules]; with any of them the rules file may be absent.
      */
-    fun load(rulesFile: File, scriptCacheDir: File? = null, basePackage: String? = null, slices: List<String>? = null): Loaded {
-        val ruleSet = ScriptLoader.load(rulesFile, scriptCacheDir).withSlices(slices).withBasePackage(basePackage)
+    fun load(
+        rulesFile: File?,
+        scriptCacheDir: File? = null,
+        basePackage: String? = null,
+        slices: List<String>? = null,
+        defaultRules: List<String>? = null,
+    ): Loaded {
+        val defaults = defaultRules.orEmpty().filter { it.isNotBlank() }
+        val fromFile = when {
+            rulesFile != null && rulesFile.isFile -> ScriptLoader.load(rulesFile, scriptCacheDir)
+            defaults.isNotEmpty() -> RuleSet(emptyList(), emptyList())
+            rulesFile == null -> throw ConfigException("no rules file and no default rules configured")
+            else -> throw ConfigException("rules file ${rulesFile.path} does not exist")
+        }
+        val sliced = slices.orEmpty().any { it.isNotBlank() }
+        val ruleSet = fromFile.withDefaultRules(defaults, sliced).withSlices(slices).withBasePackage(basePackage)
         return Loaded(ruleSet, validate(ruleSet))
     }
 
@@ -56,15 +72,16 @@ object ByterailsRunner {
 
     @JvmStatic
     fun run(
-        rulesFile: File,
+        rulesFile: File?,
         classDirs: List<File>,
         reportFile: File?,
         scriptCacheDir: File?,
         basePackage: String?,
         slices: List<String>?,
+        defaultRules: List<String>?,
         out: Consumer<String>,
     ): Int {
-        val loaded = Byterails.load(rulesFile, scriptCacheDir, basePackage, slices)
+        val loaded = Byterails.load(rulesFile, scriptCacheDir, basePackage, slices, defaultRules)
         val result = Checker(loaded.ruleSet, loaded.warnings).check(ClassDirScanner.scan(classDirs))
         ConsoleReporter.render(result).forEach(out::accept)
         if (reportFile != null) {

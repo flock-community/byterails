@@ -69,12 +69,19 @@ data class NamingRules(val patterns: List<NamePattern>, val location: SourceLoca
     val text: String get() = "naming { ${patterns.joinToString("; ") { it.text }} }"
 }
 
-/** A declared package subtree with its own rules. */
+/**
+ * A declared package subtree with its own rules.
+ *
+ * An [isolated] declaration inherits nothing: not the root block, not its enclosing declarations.
+ * Its classes may reference only what the declaration itself lists and its own subtree, which is
+ * how a domain package is kept free of every external dependency whatever the rest of the file allows.
+ */
 data class PackageDeclaration(
     val prefix: Prefix,
     val rules: List<Rule>,
     val naming: NamingRules?,
     val location: SourceLocation?,
+    val isolated: Boolean = false,
 ) {
     val name: String get() = prefix.name
 }

@@ -8,7 +8,10 @@ import org.gradle.api.provider.Property
 /** `byterails { }` in a build script. */
 abstract class ByterailsExtension {
 
-    /** The rules file. Defaults to `byterails.kts` in the root project directory. */
+    /**
+     * The rules file. Defaults to `byterails.kts` in the root project directory. It may be absent
+     * when [defaultRules] is set; the check then runs on the default rules alone.
+     */
     abstract val rulesFile: RegularFileProperty
 
     /**
@@ -25,6 +28,13 @@ abstract class ByterailsExtension {
      * Empty by default; a rules file with a slice block then fails to load.
      */
     abstract val slices: ListProperty<String>
+
+    /**
+     * Rule sets byterails ships, by id, applied on top of the rules file or instead of it.
+     * `hexagonal`: a `domain` package, in every slice or under the base package, that cannot have any
+     * external dependency.
+     */
+    abstract val defaultRules: ListProperty<String>
 
     /**
      * When true, violations are printed and the build stays green. Defaults to the Gradle

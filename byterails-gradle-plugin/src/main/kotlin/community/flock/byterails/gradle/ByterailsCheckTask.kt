@@ -23,8 +23,13 @@ import org.gradle.api.tasks.TaskAction
 abstract class ByterailsCheckTask : DefaultTask() {
 
     @get:InputFile
+    @get:Optional
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val rulesFile: RegularFileProperty
+
+    /** The path the rules file was expected at, for the message when it is absent. */
+    @get:Input
+    abstract val rulesFileConfigured: Property<String>
 
     @get:InputFiles
     @get:Classpath
@@ -44,6 +49,9 @@ abstract class ByterailsCheckTask : DefaultTask() {
     @get:Input
     abstract val slices: ListProperty<String>
 
+    @get:Input
+    abstract val defaultRules: ListProperty<String>
+
     @get:OutputFile
     abstract val reportFile: RegularFileProperty
 
@@ -52,12 +60,15 @@ abstract class ByterailsCheckTask : DefaultTask() {
 
     @TaskAction
     fun check() {
-        val rules = rulesFile.get().asFile
+        val rules = rulesFile.orNull?.asFile
+        if (rules == null && defaultRules.get().isEmpty()) {
+            throw GradleException("byterails: rules file ${rulesFileConfigured.get()} does not exist and no defaultRules are set")
+        }
         val dirs = classDirs.files.filter { it.isDirectory }
         val report = reportFile.get().asFile
         val cache = scriptCacheDir.get().asFile
         val base = basePackage.orNull
-        val violations = ToolRunner.run(toolClasspath.files, rules, dirs, report, cache, base, slices.get()) { line -> logger.lifecycle(line) }
+        val violations = ToolRunner.run(toolClasspath.files, rules, dirs, report, cache, base, slices.get(), defaultRules.get()) { line -> logger.lifecycle(line) }
         if (violations > 0 && !reportOnly.get()) {
             val noun = if (violations == 1) "violation" else "violations"
             throw GradleException("byterails found $violations $noun; see the lines above or $report")

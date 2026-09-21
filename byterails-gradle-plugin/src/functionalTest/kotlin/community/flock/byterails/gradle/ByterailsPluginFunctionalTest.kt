@@ -14,7 +14,7 @@ class ByterailsPluginFunctionalTest {
     private val toolClasspath: String = System.getProperty("byterails.toolClasspath")
         ?: error("system property byterails.toolClasspath is not set; run through Gradle")
 
-    private fun project(rules: String, vararg sources: Pair<String, String>, extra: String = ""): File {
+    private fun project(rules: String?, vararg sources: Pair<String, String>, extra: String = ""): File {
         val dir = Files.createTempDirectory("byterails-functional").toFile()
         File(dir, "settings.gradle.kts").writeText("rootProject.name = \"sample\"\n")
         val files = toolClasspath.split(File.pathSeparator).joinToString(", ") { "\"${it.replace("\\", "\\\\")}\"" }
@@ -31,7 +31,7 @@ class ByterailsPluginFunctionalTest {
             }
             """.trimIndent(),
         )
-        File(dir, "byterails.kts").writeText(rules.trimIndent())
+        if (rules != null) File(dir, "byterails.kts").writeText(rules.trimIndent())
         sources.forEach { (path, text) ->
             File(dir, "src/main/java/$path").apply { parentFile.mkdirs() }.writeText(text.trimIndent())
         }
@@ -179,6 +179,30 @@ class ByterailsPluginFunctionalTest {
         assertTrue(!result.output.contains("allowedThroughExport"), "the exported api is allowed: " + result.output)
         assertTrue(result.output.contains("allows   com.acme.billing.api, com.acme.sales.api, java.lang"), result.output)
         assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 3 packages"), result.output)
+    }
+
+    @Test
+    fun `default rules work without a rules file`() {
+        val dir = project(
+            null,
+            "com/acme/sales/domain/Sale.java" to """
+                package com.acme.sales.domain;
+                public class Sale { java.util.List<String> lines; java.math.BigDecimal total; }
+            """,
+            "com/acme/sales/domain/Leak.java" to """
+                package com.acme.sales.domain;
+                public class Leak { java.net.URI endpoint; }
+            """,
+            extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\"))\n    defaultRules.set(listOf(\"hexagonal\"))",
+        )
+        val result = runner(dir).buildAndFail()
+        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.sales.domain.Leak"), result.output)
+        assertTrue(result.output.contains("field    endpoint : java.net.URI"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 2 classes, 1 packages"), result.output)
+
+        val without = project(null, "com/acme/sales/domain/Sale.java" to "package com.acme.sales.domain; public class Sale {}")
+        val missing = runner(without).buildAndFail()
+        assertTrue(missing.output.contains("does not exist and no defaultRules are set"), missing.output)
     }
 
     @Test

@@ -43,6 +43,13 @@ public class CheckMojo extends AbstractMojo {
     @Parameter(property = "byterails.slices")
     private List<String> slices;
 
+    /**
+     * Rule sets byterails ships, by id, applied on top of the rules file or instead of it:
+     * {@code hexagonal} keeps a {@code domain} package free of external dependencies.
+     */
+    @Parameter(property = "byterails.defaultRules")
+    private List<String> defaultRules;
+
     /** When true, violations are printed and the build stays green. */
     @Parameter(property = "byterails.reportOnly", defaultValue = "false")
     private boolean reportOnly;
@@ -76,16 +83,18 @@ public class CheckMojo extends AbstractMojo {
             getLog().info("byterails: no compiled classes in " + classesDirectory + ", nothing to check");
             return;
         }
-        if (!rulesFile.isFile()) {
-            throw new MojoFailureException("byterails: rules file " + rulesFile + " does not exist");
+        boolean hasDefaults = defaultRules != null && !defaultRules.isEmpty();
+        if (!rulesFile.isFile() && !hasDefaults) {
+            throw new MojoFailureException("byterails: rules file " + rulesFile + " does not exist and no defaultRules are set");
         }
+        File rules = rulesFile.isFile() ? rulesFile : null;
 
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(CheckMojo.class.getClassLoader());
         int violations;
         try {
             violations = ByterailsRunner.run(
-                    rulesFile, List.of(classesDirectory), reportFile, scriptCacheDir, basePackage, slices, line -> getLog().info(line));
+                    rules, List.of(classesDirectory), reportFile, scriptCacheDir, basePackage, slices, defaultRules, line -> getLog().info(line));
         } catch (ConfigException e) {
             throw new MojoFailureException(e.getMessage(), e);
         } catch (RuntimeException e) {

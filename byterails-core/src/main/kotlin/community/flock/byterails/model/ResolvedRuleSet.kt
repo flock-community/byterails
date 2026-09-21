@@ -50,11 +50,18 @@ class ResolvedRuleSet(val ruleSet: RuleSet) {
     fun namingFor(declaration: PackageDeclaration): Pair<PackageDeclaration, NamingRules>? =
         chain(declaration).lastOrNull { it.naming != null }?.let { it to it.naming!! }
 
-    /** Root rules first, then the rules of each enclosing declaration from the outermost in. */
+    /**
+     * Root rules first, then the rules of each enclosing declaration from the outermost in.
+     * An isolated declaration gets its own rules only.
+     */
     fun effectiveRules(declaration: PackageDeclaration): List<EffectiveRule> =
         effectiveRulesByDeclaration.getOrPut(declaration) {
-            ruleSet.rootRules.map { EffectiveRule(it, null) } +
-                chain(declaration).flatMap { enclosing -> enclosing.rules.map { EffectiveRule(it, enclosing) } }
+            if (declaration.isolated) {
+                declaration.rules.map { EffectiveRule(it, declaration) }
+            } else {
+                ruleSet.rootRules.map { EffectiveRule(it, null) } +
+                    chain(declaration).flatMap { enclosing -> enclosing.rules.map { EffectiveRule(it, enclosing) } }
+            }
         }
 
     /** True when [declaration] lies inside a subtree owned by [group]. */

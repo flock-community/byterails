@@ -76,6 +76,8 @@ The model has one structural concept, three import rules and one naming rule. Ev
 
 **Slices.** The rules file may hold one `slice { }` block: the structure every slice of the application has, as template packages and rules. Which slices exist is a build setting, a list of package names relative to the base package, so one rules file serves every project that shares the structure. Template prefixes are relative to the slice when they point into the template's packages and absolute otherwise. An `exported` template package may be referenced from every other slice; nothing else crosses a slice boundary, because the whitelist already forbids it. A template exclusive is owned by that package of every slice together. A block without configured slices, or configured slices without a block, is a load-time error. The template expands into ordinary declarations, so every rule above applies unchanged.
 
+**Isolated packages and default rules.** A declaration marked `isolated()` inherits nothing, not the root block and not its enclosing declarations; its classes may reference only what it lists and its own subtree. Default rule sets ship with byterails and are applied by id from the rules file or from the build, in which case the rules file may be absent. The first, `hexagonal`, declares a `domain` package in every slice, or under the base package without slices, that is isolated and allows only the language baseline: `kotlin`, `org.jetbrains.annotations`, `java.lang`, `java.util`, `java.time`, `java.math` and `java.text`.
+
 Every reference from a class in package P to a type in package Q is evaluated in this order:
 
 ```mermaid
@@ -314,6 +316,7 @@ Decided rows come from the design interview of 20 September 2026. Proposed rows 
 | 28 | Core library | Shipped alongside the plugins with no build-tool dependency | Proposed |
 | 29 | Base package | A plugin input prefixes every declaration; rule prefixes follow when they point into the declared tree | Decided |
 | 30 | Slices | The rules file describes one slice in a slice block; the build names the slices; exported packages are the only cross-slice references; template exclusives are owned by every slice together | Decided |
+| 31 | Default rules | Shipped rule sets applied by id from the file or the build; hexagonal declares an isolated domain package per slice with the language baseline only | Decided |
 
 ## Coverage check: gambit-sp-commons-guardrails
 

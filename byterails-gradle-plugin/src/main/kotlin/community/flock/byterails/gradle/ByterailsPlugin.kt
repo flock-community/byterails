@@ -28,10 +28,13 @@ class ByterailsPlugin : Plugin<Project> {
         val check = project.tasks.register(CHECK_TASK, ByterailsCheckTask::class.java) { task ->
             task.group = "verification"
             task.description = "Checks the compiled main classes against byterails.kts"
-            task.rulesFile.set(extension.rulesFile)
+            // Absent file: only an error when no default rules stand in for it, which the runner reports.
+            task.rulesFile.set(extension.rulesFile.filter { it.asFile.isFile })
+            task.rulesFileConfigured.set(extension.rulesFile.map { it.asFile.path })
             task.reportOnly.set(extension.reportOnly)
             task.basePackage.set(extension.basePackage)
             task.slices.set(extension.slices)
+            task.defaultRules.set(extension.defaultRules)
             task.toolClasspath.from(extension.toolClasspath)
             task.reportFile.set(project.layout.buildDirectory.file("reports/byterails/violations.json"))
             task.scriptCacheDir.set(project.layout.buildDirectory.dir("byterails/script-cache"))
