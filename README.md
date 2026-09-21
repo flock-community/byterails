@@ -145,26 +145,138 @@ so does a build that names slices for a file without one, so the two sides canno
 
 ## Default rules
 
-byterails ships rule sets you can apply by name, from the rules file or from the build, and a build
-with default rules needs no rules file at all:
+byterails ships rule sets you apply by name. A default rule set expands into ordinary package
+declarations, so everything above about inheritance, matching and reporting applies to it unchanged.
+It can be applied from the build alone, with no `byterails.kts` at all, or on top of a rules file.
+
+### The rule sets
+
+| Id | What it declares | What it catches |
+| --- | --- | --- |
+| `hexagonal` | A `domain` package that cannot have any external dependency. With slices configured, one in every slice; without, one under the base package. The package is *isolated*: it inherits nothing from the root block or an enclosing declaration, and may reference only the language baseline and its own subtree. | Any class in `domain` that touches a framework, a library, an adapter or another package of the application, whatever the rest of the rules file allows. |
+
+The language baseline is what a class needs to exist plus the value types a domain model is made of:
+`kotlin`, `org.jetbrains.annotations`, `java.lang`, `java.util`, `java.time`, `java.math` and
+`java.text`. Nothing in it talks to the outside world.
+
+A violation reads like any other. Here `com.acme.sales.domain.Leak` holds a `java.net.URI`:
+
+```
+byterails: NOT ALLOWED  com.acme.sales.domain.Leak
+  field    endpoint : java.net.URI
+  allows   java.lang, java.math, java.text, java.time, java.util, kotlin, org.jetbrains.annotations
+  source   Leak.java
+```
+
+### Gradle
+
+The plugin's `defaultRules` list names the rule sets. Together with `basePackage` and `slices`
+this is a complete configuration; no rules file is needed:
 
 ```kotlin
 // build.gradle.kts
+plugins {
+    kotlin("jvm") version "2.3.21"
+    id("community.flock.byterails") version "0.0.2"
+}
+
 byterails {
     basePackage.set("com.acme")
-    slices.set(listOf("orders", "customers"))
+    slices.set(listOf("orders", "customers", "shipping"))
     defaultRules.set(listOf("hexagonal"))
 }
 ```
 
-| Id | What it declares |
-| --- | --- |
-| `hexagonal` | A `domain` package, in every slice or under the base package, that cannot have any external dependency. It is isolated, so it inherits nothing from the root block or an enclosing declaration, and may reference only the language baseline (`kotlin`, `org.jetbrains.annotations`, `java.lang`, `java.util`, `java.time`, `java.math`, `java.text`) and itself. |
+This declares `com.acme.orders.domain`, `com.acme.customers.domain` and `com.acme.shipping.domain`,
+each isolated. Every other package of the application is undeclared and reported as such until the
+rules file lists it, which is the whitelist doing its job. Without `slices` the same configuration
+declares one `com.acme.domain`. `./gradlew byterailsCheck` runs the check, and `check` depends on it.
 
-The same rule set is `hexagonal()` in the rules file, at the top level or inside `slice { }`. The
-building block behind it is available on any package: `pkg("domain") { isolated(); allow("kotlin") }`
-inherits nothing and allows exactly what it lists. Maven takes `<defaultRules>` or
-`-Dbyterails.defaultRules=hexagonal`; the CLI takes `--default-rules`.
+With a rules file present, the default rules are added to it. The file describes the rest of the
+structure and the default rule set supplies the domain:
+
+```kotlin
+// byterails.kts
+byterails {
+    allow("kotlin")
+    allow("java.lang")
+    allow("org.jetbrains.annotations")
+
+    slice {
+        exported("api")
+        pkg("api")
+        pkg("application") {
+            allow("domain")
+            allow("api")
+        }
+        pkg("infra") {
+            allow("domain")
+            exclusive("org.jooq")
+        }
+    }
+}
+```
+
+Declaring `domain` in the file as well would be a duplicate declaration and fails at load time; the
+rule set owns it.
+
+### Maven
+
+The `check` goal takes the same three settings. `defaultRules` is a list, so each entry is its own
+element:
+
+```xml
+<plugin>
+  <groupId>community.flock.byterails</groupId>
+  <artifactId>byterails-maven-plugin</artifactId>
+  <version>0.0.2</version>
+  <configuration>
+    <basePackage>com.acme</basePackage>
+    <slices>
+      <slice>orders</slice>
+      <slice>customers</slice>
+      <slice>shipping</slice>
+    </slices>
+    <defaultRules>
+      <defaultRule>hexagonal</defaultRule>
+    </defaultRules>
+  </configuration>
+  <executions>
+    <execution>
+      <goals>
+        <goal>check</goal>
+      </goals>
+    </execution>
+  </executions>
+</plugin>
+```
+
+Every setting is also a property, so a one-off run needs no POM change:
+
+```
+mvn verify -Dbyterails.basePackage=com.acme -Dbyterails.slices=orders,customers -Dbyterails.defaultRules=hexagonal
+```
+
+When the multi-module root holds a `byterails.kts`, the default rules are added to it, exactly as in
+Gradle; when it does not, the default rules stand alone. A rules file that is absent while no default
+rules are set fails the build with a message naming the expected path.
+
+### In the rules file and by hand
+
+The same rule set is available as a call in the rules file, `hexagonal()` at the top level or inside
+`slice { }`, for teams that keep everything in one place. The building block behind it is available
+on any package:
+
+```kotlin
+pkg("domain") {
+    isolated()          // inherit nothing, not even the root block
+    allow("kotlin")     // then list exactly what this package may use
+    allow("java.lang")
+}
+```
+
+The CLI takes `--default-rules hexagonal`. Applying a rule set twice, or naming one that does not
+exist, is a configuration error that lists the known ids.
 
 ## Gradle
 
