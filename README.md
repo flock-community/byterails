@@ -153,19 +153,27 @@ It can be applied from the build alone, with no `byterails.kts` at all, or on to
 
 | Id | What it declares | What it catches |
 | --- | --- | --- |
+| `java` | The Java standard library, allowed in every package: the whole `java` namespace, the `javax` and `com.sun` packages the JDK itself exports, the `jdk` namespace, and the W3C DOM, SAX and JGSS packages. Not `javax` as a whole, because `javax.persistence`, `javax.inject` and friends are libraries, not the JDK. | Nothing by itself; it is the grant every Java project needs, so the rules file only has to say what is specific to the application. |
+| `kotlin` | The Kotlin standard library, allowed in every package: `kotlin`, the `org.jetbrains.annotations` the compiler writes into every class, and everything in `java`, because Kotlin's collections, strings and boxed numbers compile to `java.util` and `java.lang`. | Nothing by itself; a Kotlin project needs no other root allows. |
 | `hexagonal` | A `domain` package that cannot have any external dependency. With slices configured, one in every slice; without, one under the base package. The package is *isolated*: it inherits nothing from the root block or an enclosing declaration, and may reference only the language baseline and its own subtree. | Any class in `domain` that touches a framework, a library, an adapter or another package of the application, whatever the rest of the rules file allows. |
 
 The language baseline is what a class needs to exist plus the value types a domain model is made of:
 `kotlin`, `org.jetbrains.annotations`, `java.lang`, `java.util`, `java.time`, `java.math` and
 `java.text`. Nothing in it talks to the outside world.
 
-A violation reads like any other. Here `com.acme.sales.domain.Leak` holds a `java.net.URI`:
+Rule sets are broad grants, so narrowing one is expected: a `deny("javax.swing")` at the root or an
+`exclusive("javax.sql")` in the persistence package wins over the `java` allows, and the validator
+never reports a rule-set allow as dead.
+
+A violation reads like any other, except that allows coming from a rule set show as one token, with a
+hint that spells the set out. Here `com.acme.sales.domain.Leak` holds a `java.net.URI`:
 
 ```
 byterails: NOT ALLOWED  com.acme.sales.domain.Leak
   field    endpoint : java.net.URI
-  allows   java.lang, java.math, java.text, java.time, java.util, kotlin, org.jetbrains.annotations
+  allows   [hexagonal]
   source   Leak.java
+  hint     [hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text
 ```
 
 ### Gradle
@@ -183,25 +191,23 @@ plugins {
 byterails {
     basePackage.set("com.acme")
     slices.set(listOf("orders", "customers", "shipping"))
-    defaultRules.set(listOf("hexagonal"))
+    defaultRules.set(listOf("kotlin", "hexagonal"))
 }
 ```
 
-This declares `com.acme.orders.domain`, `com.acme.customers.domain` and `com.acme.shipping.domain`,
-each isolated. Every other package of the application is undeclared and reported as such until the
-rules file lists it, which is the whitelist doing its job. Without `slices` the same configuration
-declares one `com.acme.domain`. `./gradlew byterailsCheck` runs the check, and `check` depends on it.
+`kotlin` allows the standard libraries in every package, and `hexagonal` declares
+`com.acme.orders.domain`, `com.acme.customers.domain` and `com.acme.shipping.domain`, each isolated.
+Every other package of the application is undeclared and reported as such until the rules file lists
+it, which is the whitelist doing its job. Without `slices` the same configuration declares one
+`com.acme.domain`. A Java project uses `java` instead of `kotlin`. `./gradlew byterailsCheck` runs the
+check, and `check` depends on it.
 
 With a rules file present, the default rules are added to it. The file describes the rest of the
-structure and the default rule set supplies the domain:
+structure and the rule sets supply the standard-library allows and the domain:
 
 ```kotlin
 // byterails.kts
 byterails {
-    allow("kotlin")
-    allow("java.lang")
-    allow("org.jetbrains.annotations")
-
     slice {
         exported("api")
         pkg("api")
@@ -218,7 +224,8 @@ byterails {
 ```
 
 Declaring `domain` in the file as well would be a duplicate declaration and fails at load time; the
-rule set owns it.
+rule set owns it. Root allows the file repeats, such as `allow("kotlin")` next to the `kotlin` rule
+set, are harmless.
 
 ### Maven
 
@@ -238,6 +245,7 @@ element:
       <slice>shipping</slice>
     </slices>
     <defaultRules>
+      <defaultRule>java</defaultRule>
       <defaultRule>hexagonal</defaultRule>
     </defaultRules>
   </configuration>
@@ -254,7 +262,7 @@ element:
 Every setting is also a property, so a one-off run needs no POM change:
 
 ```
-mvn verify -Dbyterails.basePackage=com.acme -Dbyterails.slices=orders,customers -Dbyterails.defaultRules=hexagonal
+mvn verify -Dbyterails.basePackage=com.acme -Dbyterails.slices=orders,customers -Dbyterails.defaultRules=java,hexagonal
 ```
 
 When the multi-module root holds a `byterails.kts`, the default rules are added to it, exactly as in
@@ -263,9 +271,9 @@ rules are set fails the build with a message naming the expected path.
 
 ### In the rules file and by hand
 
-The same rule set is available as a call in the rules file, `hexagonal()` at the top level or inside
-`slice { }`, for teams that keep everything in one place. The building block behind it is available
-on any package:
+The same rule sets are available as calls in the rules file, for teams that keep everything in one
+place: `java()` and `kotlin()` at the top level, `hexagonal()` at the top level or inside `slice { }`.
+The building block behind `hexagonal` is available on any package:
 
 ```kotlin
 pkg("domain") {
@@ -275,8 +283,8 @@ pkg("domain") {
 }
 ```
 
-The CLI takes `--default-rules hexagonal`. Applying a rule set twice, or naming one that does not
-exist, is a configuration error that lists the known ids.
+The CLI takes `--default-rules kotlin,hexagonal`. Naming a rule set that does not exist is a
+configuration error that lists the known ids; naming one twice is folded into one.
 
 ## Gradle
 

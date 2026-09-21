@@ -43,7 +43,7 @@ class DefaultRulesTest {
         val flat = RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("hexagonal"), sliced = false).withBasePackage("com.acme")
         assertEquals(listOf("com.acme.domain"), flat.packages.map { it.name })
         val error = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("onion"), sliced = false) }
-        assertTrue(error.message!!.contains("known: hexagonal"), error.message)
+        assertTrue(error.message!!.contains("known: java, kotlin, hexagonal"), error.message)
     }
 
     @Test
@@ -62,8 +62,45 @@ class DefaultRulesTest {
         val customer = result.violations.filter { it.className.name == "fixtures.slices.customers.domain.Customer" }
         assertTrue(customer.isNotEmpty())
         assertTrue(customer.all { it.kind == ViolationKind.NOT_ALLOWED && it.target?.name == "fixtures.lib.messaging.EventBus" }, customer.toString())
-        assertEquals(DefaultRules.LANGUAGE_BASELINE.sorted(), customer[0].allows)
+        assertEquals(listOf("[hexagonal]"), customer[0].allows)
+        assertTrue(customer[0].hint!!.contains("[hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang"), customer[0].hint)
         assertEquals(emptyList(), result.violations.filter { it.className.name == "fixtures.slices.orders.domain.Order" })
+    }
+
+    @Test
+    fun `java and kotlin allow the standard libraries in every package`() {
+        val javaOnly = byterails { java(); pkg("fixtures") }
+        val kotlin = byterails { kotlin(); pkg("fixtures") }
+        assertEquals(DefaultRules.JAVA_STANDARD_LIBRARY, javaOnly.rootRules.map { it.prefix.name })
+        assertEquals(listOf("kotlin", "org.jetbrains.annotations") + DefaultRules.JAVA_STANDARD_LIBRARY, kotlin.rootRules.map { it.prefix.name })
+        assertTrue(javaOnly.rootRules.all { DefaultRules.of(it) == DefaultRules.JAVA })
+
+        val classes = ClassDirScanner.scan(Fixtures.classDirs)
+        assertEquals(emptyList(), Checker(kotlin).check(classes).violations, "a Kotlin project needs nothing beyond the kotlin rule set")
+
+        val withJavaOnly = Checker(javaOnly).check(ClassDirScanner.scan(Fixtures.classDirs))
+        val metadata = withJavaOnly.violations.first { it.target?.name == "kotlin.Metadata" }
+        assertEquals(ViolationKind.NOT_ALLOWED, metadata.kind)
+        assertEquals(listOf("[java]"), metadata.allows)
+        assertTrue(metadata.hint!!.contains("allow(\"kotlin\")") && metadata.hint!!.contains("[java] is the Java standard library"), metadata.hint)
+        assertTrue(withJavaOnly.violations.none { it.target?.name?.startsWith("java.") == true })
+    }
+
+    @Test
+    fun `narrowing a rule set with deny or exclusive is not a dead rule`() {
+        val rules = byterails {
+            kotlin()
+            deny("javax.swing")
+            pkg("com.acme.infra") { exclusive("javax.sql") }
+            pkg("com.acme.domain") { deny("java.util.concurrent") }
+        }
+        assertEquals(emptyList(), Byterails.validate(rules))
+    }
+
+    @Test
+    fun `the build applies root rule sets and deduplicates them`() {
+        val ruleSet = RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("kotlin", "java", "kotlin"), sliced = false)
+        assertEquals(listOf("kotlin", "org.jetbrains.annotations") + DefaultRules.JAVA_STANDARD_LIBRARY, ruleSet.rootRules.map { it.prefix.name })
     }
 
     @Test

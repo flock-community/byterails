@@ -193,11 +193,13 @@ class ByterailsPluginFunctionalTest {
                 package com.acme.sales.domain;
                 public class Leak { java.net.URI endpoint; }
             """,
-            extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\"))\n    defaultRules.set(listOf(\"hexagonal\"))",
+            extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\"))\n    defaultRules.set(listOf(\"java\", \"hexagonal\"))",
         )
         val result = runner(dir).buildAndFail()
         assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.sales.domain.Leak"), result.output)
         assertTrue(result.output.contains("field    endpoint : java.net.URI"), result.output)
+        assertTrue(result.output.contains("allows   [hexagonal]"), result.output)
+        assertTrue(result.output.contains("hint     [hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text"), result.output)
         assertTrue(result.output.contains("byterails: 1 violation in 2 classes, 1 packages"), result.output)
 
         val without = project(null, "com/acme/sales/domain/Sale.java" to "package com.acme.sales.domain; public class Sale {}")

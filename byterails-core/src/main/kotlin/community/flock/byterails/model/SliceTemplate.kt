@@ -26,7 +26,8 @@ data class SliceTemplate(
             fun resolve(rule: Rule): Rule {
                 val candidate = Prefix.concat(sliceRoot, rule.prefix)
                 val pointsIntoSlice = templatePackages.any { candidate.covers(it) || it.covers(candidate) }
-                val group = if (rule.kind == RuleKind.EXCLUSIVE) "$id:${rule.prefix.name}" else null
+                // A template exclusive is owned by every slice together; any other rule keeps the group it came with.
+                val group = if (rule.kind == RuleKind.EXCLUSIVE) "$id:${rule.prefix.name}" else rule.group
                 return rule.copy(prefix = if (pointsIntoSlice) candidate else rule.prefix, group = group)
             }
             val exportedAllows = slices.filter { it != sliceRoot }.flatMap { other ->

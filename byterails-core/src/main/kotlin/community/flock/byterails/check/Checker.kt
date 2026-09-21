@@ -5,6 +5,7 @@ import community.flock.byterails.analysis.Reference
 import community.flock.byterails.analysis.Site
 import community.flock.byterails.model.ClassName
 import community.flock.byterails.model.ConfigProblem
+import community.flock.byterails.model.DefaultRules
 import community.flock.byterails.model.EffectiveRule
 import community.flock.byterails.model.PackageDeclaration
 import community.flock.byterails.model.Prefix
@@ -69,11 +70,20 @@ class Checker(ruleSet: RuleSet, private val warnings: List<ConfigProblem> = empt
 
         if (rules.any { it.rule.kind != RuleKind.DENY && it.rule.prefix.covers(target) }) return null
 
-        val allows = rules.filter { it.rule.kind != RuleKind.DENY }.map { it.rule.prefix.name }.distinct().sorted()
+        val granted = rules.filter { it.rule.kind != RuleKind.DENY }
+        val sets = granted.mapNotNull { DefaultRules.of(it.rule) }.distinct()
+        val allows = granted
+            .map { effective -> DefaultRules.of(effective.rule)?.let { "[${it.id}]" } ?: effective.rule.prefix.name }
+            .distinct()
+            .sorted()
+        val hints = listOfNotNull(
+            HINTS.firstOrNull { (prefix, _) -> prefix.covers(target) }?.second,
+            sets.takeIf { it.isNotEmpty() }?.joinToString("; ") { "[${it.id}] is ${it.allowsLabel}" },
+        )
         return Violation(
             ViolationKind.NOT_ALLOWED, cls.name, reference.site, reference.line, target, null, allows, cls.sourceFile,
             "${cls.name} references $target, which \"${declaration.name}\" is not allowed to use",
-            hint = HINTS.firstOrNull { (prefix, _) -> prefix.covers(target) }?.second,
+            hint = hints.takeIf { it.isNotEmpty() }?.joinToString(" "),
         )
     }
 

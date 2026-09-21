@@ -54,6 +54,16 @@ class ByterailsBuilder internal constructor() {
         sliceTemplate = SliceBuilder(location).apply(block).build()
     }
 
+    /** The `java` default rules: the Java standard library, allowed in every package. */
+    fun java() {
+        rootRules += DefaultRules.JAVA.rootRules(SourceLocation.capture())
+    }
+
+    /** The `kotlin` default rules: the Kotlin standard library and the Java one it compiles to, allowed in every package. */
+    fun kotlin() {
+        rootRules += DefaultRules.KOTLIN.rootRules(SourceLocation.capture())
+    }
+
     /** The hexagonal default rules: a `domain` package under the base package without external dependencies. */
     fun hexagonal() {
         packages += DefaultRules.HEXAGONAL.declarations(SourceLocation.capture())
