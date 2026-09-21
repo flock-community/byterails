@@ -25,6 +25,7 @@ class ByterailsBuilder internal constructor() {
 
     private val rootRules = mutableListOf<Rule>()
     private val packages = mutableListOf<PackageDeclaration>()
+    private var sliceTemplate: SliceTemplate? = null
 
     /** Permits references to anything under [prefix] from every declared package. */
     fun allow(prefix: String) {
@@ -43,35 +44,24 @@ class ByterailsBuilder internal constructor() {
     }
 
     /**
-     * Declares sibling packages under [root] that share one structure: the template in [block].
-     * Without a root the slices sit at the top of the package tree, or under the base package.
+     * Describes the structure every slice of the application has. Which slices exist is configured in
+     * the build, as package names relative to the base package.
      */
-    fun slices(root: String = "", block: SlicesBuilder.() -> Unit) {
+    fun slice(block: SliceBuilder.() -> Unit) {
         val location = SourceLocation.capture()
-        val prefix = if (root.isBlank()) Prefix.ROOT else parsePrefix(root, location)
-        val template = SlicesBuilder(prefix, location).apply(block).build()
-        if (template.slices.isEmpty()) throw ConfigException("slices(\"${prefix.name}\") names no slice; add slice(\"...\")", location)
-        packages += template.expand()
+        if (sliceTemplate != null) throw ConfigException("slice { } may appear only once", location)
+        sliceTemplate = SliceBuilder(location).apply(block).build()
     }
 
-    fun build(): RuleSet = RuleSet(rootRules.toList(), packages.toList())
+    fun build(): RuleSet = RuleSet(rootRules.toList(), packages.toList(), sliceTemplate)
 }
 
 @ByterailsDsl
-class SlicesBuilder internal constructor(
-    private val root: Prefix,
-    private val location: SourceLocation?,
-) {
-    private val slices = mutableListOf<Prefix>()
+class SliceBuilder internal constructor(private val location: SourceLocation?) {
     private val exported = mutableListOf<Prefix>()
     private val rules = mutableListOf<Rule>()
     private var naming: NamingRules? = null
     private val packages = mutableListOf<PackageDeclaration>()
-
-    /** One slice: a sub-package of the root that receives the whole template. */
-    fun slice(name: String) {
-        slices += parsePrefix(name, SourceLocation.capture())
-    }
 
     /** A template package every slice may reference in every other slice, for example `api`. */
     fun exported(name: String) {
@@ -95,9 +85,9 @@ class SlicesBuilder internal constructor(
     /** Naming for classes directly in a slice root. */
     fun naming(block: NamingBuilder.() -> Unit) {
         val location = SourceLocation.capture()
-        if (naming != null) throw ConfigException("slices(\"${root.name}\") has more than one naming block", location)
+        if (naming != null) throw ConfigException("slice { } has more than one naming block", location)
         val patterns = NamingBuilder().apply(block).patterns
-        if (patterns.isEmpty()) throw ConfigException("naming block of slices(\"${root.name}\") has no patterns", location)
+        if (patterns.isEmpty()) throw ConfigException("naming block of slice { } has no patterns", location)
         naming = NamingRules(patterns, location)
     }
 
@@ -107,8 +97,7 @@ class SlicesBuilder internal constructor(
         packages += PackageBuilder(parsePrefix(name, location), location).apply(block).build()
     }
 
-    internal fun build(): SliceTemplate =
-        SliceTemplate(root, slices.toList(), exported.toList(), rules.toList(), naming, packages.toList(), location)
+    internal fun build(): SliceTemplate = SliceTemplate(exported.toList(), rules.toList(), naming, packages.toList(), location)
 }
 
 @ByterailsDsl

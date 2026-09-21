@@ -74,7 +74,7 @@ The model has one structural concept, three import rules and one naming rule. Ev
 
 **Naming.** A `naming { }` block inside a declaration constrains the simple names of classes in that subtree. A class passes when it matches at least one pattern in the block. Naming blocks do not inherit: the nearest enclosing declaration with a naming block decides.
 
-**Slices.** A `slices("com.acme") { }` block names sibling packages, the slices, and holds one template of packages and rules that every slice receives. Template prefixes are relative to the slice when they point into the template's packages and absolute otherwise. An `exported` template package may be referenced from every other slice; nothing else crosses a slice boundary, because the whitelist already forbids it. A template exclusive is owned by that package of every slice together. The block expands into ordinary declarations, so every rule above applies unchanged.
+**Slices.** The rules file may hold one `slice { }` block: the structure every slice of the application has, as template packages and rules. Which slices exist is a build setting, a list of package names relative to the base package, so one rules file serves every project that shares the structure. Template prefixes are relative to the slice when they point into the template's packages and absolute otherwise. An `exported` template package may be referenced from every other slice; nothing else crosses a slice boundary, because the whitelist already forbids it. A template exclusive is owned by that package of every slice together. A block without configured slices, or configured slices without a block, is a load-time error. The template expands into ordinary declarations, so every rule above applies unchanged.
 
 Every reference from a class in package P to a type in package Q is evaluated in this order:
 
@@ -313,7 +313,7 @@ Decided rows come from the design interview of 20 September 2026. Proposed rows 
 | 27 | Modules | Per-module runs against one root file; no aggregation | Proposed |
 | 28 | Core library | Shipped alongside the plugins with no build-tool dependency | Proposed |
 | 29 | Base package | A plugin input prefixes every declaration; rule prefixes follow when they point into the declared tree | Decided |
-| 30 | Slices | One template per group of sibling packages; exported packages are the only cross-slice references; template exclusives are owned by every slice together | Decided |
+| 30 | Slices | The rules file describes one slice in a slice block; the build names the slices; exported packages are the only cross-slice references; template exclusives are owned by every slice together | Decided |
 
 ## Coverage check: gambit-sp-commons-guardrails
 

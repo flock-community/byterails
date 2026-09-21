@@ -19,6 +19,9 @@ object RuleSetValidator {
     fun validate(ruleSet: RuleSet): List<ConfigProblem> {
         val resolved = ResolvedRuleSet(ruleSet)
         val problems = mutableListOf<ConfigProblem>()
+        ruleSet.sliceTemplate?.let {
+            problems += error("the rules file has a slice { } block, but no slices are configured; name them in the build", it.location)
+        }
         duplicateDeclarations(resolved, problems)
         exclusiveAtRoot(ruleSet, problems)
         exclusiveClashes(resolved, problems)

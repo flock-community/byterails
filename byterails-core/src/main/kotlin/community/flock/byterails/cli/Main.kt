@@ -7,7 +7,7 @@ import kotlin.system.exitProcess
 
 /**
  * `java -cp ... community.flock.byterails.cli.Main --rules byterails.kts --classes build/classes/kotlin/main [--classes ...]
- * [--base-package com.acme] [--report build/byterails.json] [--cache build/byterails-cache] [--report-only]`
+ * [--base-package com.acme] [--slices orders,customers] [--report build/byterails.json] [--cache build/byterails-cache] [--report-only]`
  *
  * Exit status: 0 clean, 1 violations, 2 configuration or usage error.
  */
@@ -20,6 +20,7 @@ object Main {
         var report: File? = null
         var cache: File? = null
         var basePackage: String? = null
+        var slices: List<String>? = null
         var reportOnly = false
         var i = 0
         while (i < args.size) {
@@ -29,6 +30,7 @@ object Main {
                 "--report" -> report = File(args.getOrNull(++i) ?: usage("--report needs a file"))
                 "--cache" -> cache = File(args.getOrNull(++i) ?: usage("--cache needs a directory"))
                 "--base-package" -> basePackage = args.getOrNull(++i) ?: usage("--base-package needs a package")
+                "--slices" -> slices = (args.getOrNull(++i) ?: usage("--slices needs a comma-separated list")).split(',')
                 "--report-only" -> reportOnly = true
                 "--help", "-h" -> usage(null)
                 else -> usage("unknown argument $arg")
@@ -38,7 +40,7 @@ object Main {
         if (rules == null) usage("--rules is required")
         if (classes.isEmpty()) usage("--classes is required")
         val count = try {
-            ByterailsRunner.run(rules, classes, report, cache, basePackage) { println(it) }
+            ByterailsRunner.run(rules, classes, report, cache, basePackage, slices) { println(it) }
         } catch (e: ConfigException) {
             System.err.println(e.message)
             exitProcess(2)
@@ -49,7 +51,7 @@ object Main {
     private fun usage(problem: String?): Nothing {
         if (problem != null) System.err.println("byterails: $problem")
         System.err.println(
-            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--base-package <package>] [--report <file>] [--cache <dir>] [--report-only]",
+            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--base-package <package>] [--slices <a,b>] [--report <file>] [--cache <dir>] [--report-only]",
         )
         exitProcess(2)
     }

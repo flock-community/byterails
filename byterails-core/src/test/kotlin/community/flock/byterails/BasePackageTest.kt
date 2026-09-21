@@ -3,6 +3,7 @@ package community.flock.byterails
 import community.flock.byterails.dsl.byterails
 import community.flock.byterails.model.ConfigException
 import community.flock.byterails.model.withBasePackage
+import community.flock.byterails.model.withSlices
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -63,16 +64,14 @@ class BasePackageTest {
             pkg("app.infra.persistence") { allow("app.domain"); allow("lib.persistence"); exclusive("lib.jooq") }
             pkg("app.infra.web") { allow("app.application"); exclusive("lib.web"); naming { endsWith("Controller"); endsWith("Advice") } }
             pkg("app.javainterop")
-            slices("slices") {
-                slice("orders")
-                slice("customers")
+            slice {
                 exported("api")
                 pkg("api")
                 pkg("domain")
                 pkg("application") { allow("domain"); allow("api") }
                 pkg("infra") { allow("domain"); exclusive("lib.messaging") }
             }
-        }.withBasePackage("fixtures")
+        }.withSlices(listOf("slices.orders", "slices.customers")).withBasePackage("fixtures")
         val result = Byterails.check(rules, Fixtures.classDirs)
         val expected = Byterails.check(Fixtures.rules(), Fixtures.classDirs)
         assertEquals(expected.violations.map { it.kind to it.className.name }, result.violations.map { it.kind to it.className.name })

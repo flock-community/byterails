@@ -25,6 +25,7 @@ internal object ToolRunner {
         reportFile: File,
         cacheDir: File,
         basePackage: String?,
+        slices: List<String>,
         out: Consumer<String>,
     ): Int {
         if (classpath.isEmpty()) throw GradleException("byterails: the tool classpath is empty; set byterails.toolClasspath or check repositories")
@@ -33,12 +34,12 @@ internal object ToolRunner {
         }
         val runner = loader.loadClass(RUNNER_CLASS)
         val method = runner.getMethod(
-            "run", File::class.java, List::class.java, File::class.java, File::class.java, String::class.java, Consumer::class.java,
+            "run", File::class.java, List::class.java, File::class.java, File::class.java, String::class.java, List::class.java, Consumer::class.java,
         )
         val previous = Thread.currentThread().contextClassLoader
         Thread.currentThread().contextClassLoader = loader
         try {
-            return method.invoke(null, rulesFile, classDirs, reportFile, cacheDir, basePackage, out) as Int
+            return method.invoke(null, rulesFile, classDirs, reportFile, cacheDir, basePackage, slices, out) as Int
         } catch (e: InvocationTargetException) {
             val cause = e.targetException
             throw GradleException(cause.message ?: cause.toString(), cause)

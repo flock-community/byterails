@@ -4,6 +4,7 @@ import community.flock.byterails.analysis.AnalyzedClass
 import community.flock.byterails.analysis.ClassFileAnalyzer
 import community.flock.byterails.dsl.byterails
 import community.flock.byterails.model.RuleSet
+import community.flock.byterails.model.withSlices
 import java.io.File
 
 /** The compiled fixture classes, handed to the tests by the build through a system property. */
@@ -59,9 +60,7 @@ object Fixtures {
 
         pkg("fixtures.app.javainterop")
 
-        slices("fixtures.slices") {
-            slice("orders")
-            slice("customers")
+        slice {
             exported("api")
             pkg("api")
             pkg("domain")
@@ -74,5 +73,5 @@ object Fixtures {
                 exclusive("fixtures.lib.messaging")
             }
         }
-    }
+    }.withSlices(listOf("fixtures.slices.orders", "fixtures.slices.customers"))
 }

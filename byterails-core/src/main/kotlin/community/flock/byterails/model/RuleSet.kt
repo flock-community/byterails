@@ -79,8 +79,15 @@ data class PackageDeclaration(
     val name: String get() = prefix.name
 }
 
-/** The whole configuration: root rules, inherited by everything, plus the declared packages. */
+/**
+ * The whole configuration: root rules, inherited by everything, plus the declared packages.
+ *
+ * [sliceTemplate] is the structure of one slice as the rules file describes it. Which slices exist is
+ * configured in the build, and [withSlices] turns the template into ordinary declarations; a rule set
+ * that still carries a template cannot be checked.
+ */
 data class RuleSet(
     val rootRules: List<Rule>,
     val packages: List<PackageDeclaration>,
+    val sliceTemplate: SliceTemplate? = null,
 )

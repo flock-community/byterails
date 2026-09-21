@@ -8,6 +8,7 @@ import community.flock.byterails.model.ConfigProblem
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.Severity
 import community.flock.byterails.model.withBasePackage
+import community.flock.byterails.model.withSlices
 import community.flock.byterails.report.ConsoleReporter
 import community.flock.byterails.report.JsonReporter
 import community.flock.byterails.script.ScriptLoader
@@ -22,9 +23,10 @@ object Byterails {
      * Loads and validates a `byterails.kts` file.
      *
      * @param basePackage an optional package every declaration in the file is relative to; see [withBasePackage].
+     * @param slices the slices the file's `slice { }` block applies to, relative to the base package; see [withSlices].
      */
-    fun load(rulesFile: File, scriptCacheDir: File? = null, basePackage: String? = null): Loaded {
-        val ruleSet = ScriptLoader.load(rulesFile, scriptCacheDir).withBasePackage(basePackage)
+    fun load(rulesFile: File, scriptCacheDir: File? = null, basePackage: String? = null, slices: List<String>? = null): Loaded {
+        val ruleSet = ScriptLoader.load(rulesFile, scriptCacheDir).withSlices(slices).withBasePackage(basePackage)
         return Loaded(ruleSet, validate(ruleSet))
     }
 
@@ -59,9 +61,10 @@ object ByterailsRunner {
         reportFile: File?,
         scriptCacheDir: File?,
         basePackage: String?,
+        slices: List<String>?,
         out: Consumer<String>,
     ): Int {
-        val loaded = Byterails.load(rulesFile, scriptCacheDir, basePackage)
+        val loaded = Byterails.load(rulesFile, scriptCacheDir, basePackage, slices)
         val result = Checker(loaded.ruleSet, loaded.warnings).check(ClassDirScanner.scan(classDirs))
         ConsoleReporter.render(result).forEach(out::accept)
         if (reportFile != null) {

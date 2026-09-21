@@ -144,6 +144,44 @@ class ByterailsPluginFunctionalTest {
     }
 
     @Test
+    fun `slices are configured in the build and the rules file describes one slice`() {
+        val dir = project(
+            """
+            byterails {
+                allow("java.lang")
+                slice {
+                    exported("api")
+                    pkg("api")
+                    pkg("domain") { allow("api") }
+                }
+            }
+            """,
+            "com/acme/sales/api/SalesApi.java" to """
+                package com.acme.sales.api;
+                public class SalesApi { public String id() { return "s"; } }
+            """,
+            "com/acme/sales/domain/Sale.java" to """
+                package com.acme.sales.domain;
+                public class Sale { com.acme.sales.api.SalesApi api; }
+            """,
+            "com/acme/billing/domain/Invoice.java" to """
+                package com.acme.billing.domain;
+                public class Invoice {
+                    com.acme.sales.api.SalesApi allowedThroughExport;
+                    com.acme.sales.domain.Sale notAllowed;
+                }
+            """,
+            extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\", \"billing\"))",
+        )
+        val result = runner(dir).buildAndFail()
+        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.billing.domain.Invoice"), result.output)
+        assertTrue(result.output.contains("field    notAllowed : com.acme.sales.domain.Sale"), result.output)
+        assertTrue(!result.output.contains("allowedThroughExport"), "the exported api is allowed: " + result.output)
+        assertTrue(result.output.contains("allows   com.acme.billing.api, com.acme.sales.api, java.lang"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 3 packages"), result.output)
+    }
+
+    @Test
     fun `a broken rules file fails before any class is read`() {
         val dir = project(
             """

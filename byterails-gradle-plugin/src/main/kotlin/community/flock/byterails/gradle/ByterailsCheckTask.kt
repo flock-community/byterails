@@ -5,6 +5,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Classpath
@@ -40,6 +41,9 @@ abstract class ByterailsCheckTask : DefaultTask() {
     @get:Optional
     abstract val basePackage: Property<String>
 
+    @get:Input
+    abstract val slices: ListProperty<String>
+
     @get:OutputFile
     abstract val reportFile: RegularFileProperty
 
@@ -53,7 +57,7 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val report = reportFile.get().asFile
         val cache = scriptCacheDir.get().asFile
         val base = basePackage.orNull
-        val violations = ToolRunner.run(toolClasspath.files, rules, dirs, report, cache, base) { line -> logger.lifecycle(line) }
+        val violations = ToolRunner.run(toolClasspath.files, rules, dirs, report, cache, base, slices.get()) { line -> logger.lifecycle(line) }
         if (violations > 0 && !reportOnly.get()) {
             val noun = if (violations == 1) "violation" else "violations"
             throw GradleException("byterails found $violations $noun; see the lines above or $report")

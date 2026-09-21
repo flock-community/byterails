@@ -2,6 +2,7 @@ package community.flock.byterails.gradle
 
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 
 /** `byterails { }` in a build script. */
@@ -17,6 +18,13 @@ abstract class ByterailsExtension {
      * say. Unset by default: every name in the file is then absolute.
      */
     abstract val basePackage: Property<String>
+
+    /**
+     * The slices of the application: package names relative to the base package, for example
+     * `orders` and `customers`. The rules file's `slice { }` block is applied to each of them.
+     * Empty by default; a rules file with a slice block then fails to load.
+     */
+    abstract val slices: ListProperty<String>
 
     /**
      * When true, violations are printed and the build stays green. Defaults to the Gradle

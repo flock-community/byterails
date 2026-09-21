@@ -78,22 +78,21 @@ Cycles between declared packages and Kotlin package names that compile to Java o
 
 ## Slices
 
-An application cut into vertical slices, each with the same internal structure, declares that
-structure once:
+An application cut into vertical slices, each with the same internal structure, describes that
+structure once in the rules file and names the slices in the build:
 
 ```kotlin
+// byterails.kts
 byterails {
     allow("kotlin")
     allow("java.lang")
     allow("org.jetbrains.annotations")
 
-    slices("com.acme") {
-        slice("orders")
-        slice("customers")
-        slice("shipping")
+    pkg("common")                   // shared code, relative to the base package
 
-        exported("api")            // every slice may use the api package of every other slice
-        allow("org.slf4j")         // rules of each slice root, inherited by its packages
+    slice {
+        exported("api")             // every slice may use the api package of every other slice
+        allow("org.slf4j")          // rules of each slice root, inherited by its packages
 
         pkg("api")
         pkg("domain")
@@ -109,13 +108,23 @@ byterails {
 }
 ```
 
-This declares `com.acme.orders`, `com.acme.orders.domain` and so on for each slice. Template rules are
-relative to the slice: `allow("domain")` in `orders` means `com.acme.orders.domain`, while a prefix that
-points outside the template, such as `org.slf4j`, is taken as written. Slices cannot see each other,
-because nothing allows them to, except through exported packages. An exclusive in the template is
-owned by that package of every slice together, so the slices' copies never clash with each other and
-still deny the library to everything outside the slices. Without a root, `slices { }` puts the slices at
-the top of the tree or under the base package.
+```kotlin
+// build.gradle.kts
+byterails {
+    basePackage.set("com.acme")
+    slices.set(listOf("orders", "customers", "shipping"))
+}
+```
+
+Maven takes the same as `<slices><slice>orders</slice>...</slices>` or `-Dbyterails.slices=orders,customers`.
+Slice names are packages relative to the base package. The template expands into
+`com.acme.orders`, `com.acme.orders.domain` and so on for each slice. Template rules are relative to
+the slice: `allow("domain")` in `orders` means `com.acme.orders.domain`, while a prefix that points
+outside the template, such as `org.slf4j`, is taken as written. Slices cannot see each other, because
+nothing allows them to, except through exported packages. An exclusive in the template is owned by
+that package of every slice together, so the slices' copies never clash and the library stays denied
+outside the slices. A rules file with a `slice { }` block and no configured slices fails to load, and
+so does a build that names slices for a file without one, so the two sides cannot drift apart.
 
 ## Gradle
 
@@ -149,7 +158,7 @@ byterails: 2 violations in 1,204 classes, 17 packages
 A project whose packages all live under one root can set `byterails { basePackage.set("com.acme") }`
 and write the rules file relative to it: `pkg("domain")` then means `com.acme.domain`. A rule prefix
 is prefixed too when it points into the declared package tree, so `allow("domain")` becomes
-`allow("com.acme.domain")` while `allow("kotlin")` stays as written. The CLI takes `--base-package`.
+`allow("com.acme.domain")` while `allow("kotlin")` stays as written. The CLI takes `--base-package` and `--slices`.
 
 While adopting byterails on an existing code base, `-Pbyterails.reportOnly=true` prints every
 violation and keeps the build green. The same switch is available as `byterails { reportOnly = true }`.
@@ -179,8 +188,8 @@ matters; `byterails { toolClasspath.setFrom(...) }` overrides where the core com
 The `check` goal runs in the `verify` phase and reads the module's compiled classes against
 `byterails.kts` in the multi-module root directory. Each module checks its own classes, violations
 fail the build, and the JSON report lands in `target/byterails/violations.json`. Properties:
-`-Dbyterails.reportOnly=true`, `-Dbyterails.skip=true`, `-Dbyterails.rulesFile=...` and
-`-Dbyterails.basePackage=...`. The same rules file gives the same result from Gradle and Maven,
+`-Dbyterails.reportOnly=true`, `-Dbyterails.skip=true`, `-Dbyterails.rulesFile=...`,
+`-Dbyterails.basePackage=...` and `-Dbyterails.slices=...`. The same rules file gives the same result from Gradle and Maven,
 because both call the same core.
 
 ## Command line and library

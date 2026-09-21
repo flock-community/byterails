@@ -36,6 +36,13 @@ public class CheckMojo extends AbstractMojo {
     @Parameter(property = "byterails.basePackage")
     private String basePackage;
 
+    /**
+     * The slices of the application: package names relative to the base package. The rules file's
+     * {@code slice { }} block is applied to each of them. As a property: {@code -Dbyterails.slices=orders,customers}.
+     */
+    @Parameter(property = "byterails.slices")
+    private List<String> slices;
+
     /** When true, violations are printed and the build stays green. */
     @Parameter(property = "byterails.reportOnly", defaultValue = "false")
     private boolean reportOnly;
@@ -78,7 +85,7 @@ public class CheckMojo extends AbstractMojo {
         int violations;
         try {
             violations = ByterailsRunner.run(
-                    rulesFile, List.of(classesDirectory), reportFile, scriptCacheDir, basePackage, line -> getLog().info(line));
+                    rulesFile, List.of(classesDirectory), reportFile, scriptCacheDir, basePackage, slices, line -> getLog().info(line));
         } catch (ConfigException e) {
             throw new MojoFailureException(e.getMessage(), e);
         } catch (RuntimeException e) {

@@ -31,6 +31,7 @@ class ByterailsPlugin : Plugin<Project> {
             task.rulesFile.set(extension.rulesFile)
             task.reportOnly.set(extension.reportOnly)
             task.basePackage.set(extension.basePackage)
+            task.slices.set(extension.slices)
             task.toolClasspath.from(extension.toolClasspath)
             task.reportFile.set(project.layout.buildDirectory.file("reports/byterails/violations.json"))
             task.scriptCacheDir.set(project.layout.buildDirectory.dir("byterails/script-cache"))

@@ -22,7 +22,7 @@ fun RuleSet.withBasePackage(basePackage: String?): RuleSet {
         val pointsIntoTree = declared.any { candidate.covers(it) || it.covers(candidate) }
         return if (pointsIntoTree) rule.copy(prefix = candidate) else rule
     }
-    return RuleSet(
+    return copy(
         rootRules = rootRules.map(::resolve),
         packages = packages.zip(declared) { declaration, prefix ->
             declaration.copy(prefix = prefix, rules = declaration.rules.map(::resolve))
