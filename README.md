@@ -115,6 +115,33 @@ violation and keeps the build green. The same switch is available as `byterails 
 The tool runs in a class loader of its own, so neither Gradle's nor the build's Kotlin version
 matters; `byterails { toolClasspath.setFrom(...) }` overrides where the core comes from.
 
+## Maven
+
+```xml
+<plugin>
+  <groupId>community.flock.byterails</groupId>
+  <artifactId>byterails-maven-plugin</artifactId>
+  <version>0.1.0</version>
+  <configuration>
+    <basePackage>com.acme</basePackage>
+  </configuration>
+  <executions>
+    <execution>
+      <goals>
+        <goal>check</goal>
+      </goals>
+    </execution>
+  </executions>
+</plugin>
+```
+
+The `check` goal runs in the `verify` phase and reads the module's compiled classes against
+`byterails.kts` in the multi-module root directory. Each module checks its own classes, violations
+fail the build, and the JSON report lands in `target/byterails/violations.json`. Properties:
+`-Dbyterails.reportOnly=true`, `-Dbyterails.skip=true`, `-Dbyterails.rulesFile=...` and
+`-Dbyterails.basePackage=...`. The same rules file gives the same result from Gradle and Maven,
+because both call the same core.
+
 ## Command line and library
 
 The core ships a small CLI, exit status 1 on violations and 2 on a broken rules file:
@@ -161,13 +188,16 @@ questions are in [docs/PRD.md](docs/PRD.md).
 
 ```
 ./gradlew build
+./gradlew publishToMavenLocal && mvn -f byterails-maven-plugin/pom.xml verify
 ```
 
-The build compiles a corpus of Kotlin and Java fixtures and asserts where every kind of reference is
-found, runs the Gradle plugin against real builds with TestKit, and checks `byterails-core` against
-this repository's own [`byterails.kts`](byterails.kts).
+The Gradle build compiles a corpus of Kotlin and Java fixtures and asserts where every kind of
+reference is found, runs the Gradle plugin against real builds with TestKit, and checks
+`byterails-core` against this repository's own [`byterails.kts`](byterails.kts). The Maven plugin is
+built by Maven, because its descriptor comes from Maven's plugin tooling, and runs its integration
+tests against sample projects with the invoker plugin.
 
 ## Status
 
-0.1: core library, `byterails.kts` loader, Gradle plugin, CLI. Planned next: Maven plugin,
+0.1: core library, `byterails.kts` loader, Gradle plugin, Maven plugin, CLI. Planned next:
 kind-aware and annotation-conditioned naming, expiring allows, SARIF and JUnit XML reports.

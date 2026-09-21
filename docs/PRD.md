@@ -356,7 +356,7 @@ Each of these changes a requirement above once answered.
 
 ## Milestones
 
-Four releases, each with an exit criterion that a real project has to meet, not a feature list alone. The 0.1 scope was implemented on 21 September 2026; its exit criterion, one Flock project green in CI, is still open.
+Four releases, each with an exit criterion that a real project has to meet, not a feature list alone. The 0.1 scope and the Maven plugin from 0.2 were implemented on 21 September 2026; the exit criteria, a Flock project and a Maven service green in CI, are still open.
 
 | Version | Scope | Exit criterion |
 | --- | --- | --- |

@@ -1,0 +1,21 @@
+import java.io.*;
+import java.nio.file.*;
+
+String log = new String(Files.readAllBytes(new File(basedir, "build.log").toPath()), "UTF-8");
+String[] expected = {
+    "byterails: EXCLUSIVE    com.acme.domain.OrderList",
+    "field    orders : java.util.List",
+    "rule     exclusive(\"java.util\")",
+    "byterails.kts:6  in \"com.acme.infra\"",
+    "byterails: 1 violation in 3 classes, 2 packages",
+    "byterails found 1 violation"
+};
+for (String line : expected) {
+    if (log.indexOf(line) < 0) {
+        throw new RuntimeException("build.log is missing: " + line);
+    }
+}
+if (!new File(basedir, "target/byterails/violations.json").isFile()) {
+    throw new RuntimeException("no JSON report written");
+}
+return true;
