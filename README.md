@@ -105,6 +105,11 @@ byterails: NOT ALLOWED  com.acme.domain.OrderService
 byterails: 2 violations in 1,204 classes, 17 packages
 ```
 
+A project whose packages all live under one root can set `byterails { basePackage.set("com.acme") }`
+and write the rules file relative to it: `pkg("domain")` then means `com.acme.domain`. A rule prefix
+is prefixed too when it points into the declared package tree, so `allow("domain")` becomes
+`allow("com.acme.domain")` while `allow("kotlin")` stays as written. The CLI takes `--base-package`.
+
 While adopting byterails on an existing code base, `-Pbyterails.reportOnly=true` prints every
 violation and keeps the build green. The same switch is available as `byterails { reportOnly = true }`.
 The tool runs in a class loader of its own, so neither Gradle's nor the build's Kotlin version

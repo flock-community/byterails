@@ -56,6 +56,9 @@ class Prefix private constructor(val segments: List<String>) : Comparable<Prefix
             return Prefix(segments)
         }
 
+        /** [base] followed by [rest]: the prefix `com.acme` plus `domain` is `com.acme.domain`. */
+        fun concat(base: Prefix, rest: Prefix): Prefix = Prefix(base.segments + rest.segments)
+
         internal fun packageSegments(packageName: String): List<String> =
             if (packageName.isEmpty()) emptyList() else packageName.split('.')
 

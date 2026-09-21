@@ -172,6 +172,7 @@ These are the requirements the rule model implies, numbered so the milestones an
 10. **FR-10 Scope of classes.** The check covers the main output classes of a module. Test classes are excluded in 0.1 and become a separately configured scope later.
 11. **FR-11 Generated code.** Generated classes that land in a declared package are checked like any other class for imports. There is no exemption, because a generated adapter that reaches into the domain is still a violation.
 12. **FR-12 Failure.** One or more violations fail the build task with a non-zero status unless report-only mode is active.
+13. **FR-12a Base package.** The plugin and the CLI accept an optional base package. Every declaration in the rules file is prefixed with it. A rule prefix is prefixed when the prefixed form points into the declared package tree, that is it covers a declaration or a declaration covers it, and is left as written otherwise. A malformed base package is a load-time error.
 
 ## Requirements: naming
 
@@ -309,6 +310,7 @@ Decided rows come from the design interview of 20 September 2026. Proposed rows 
 | 26 | Cycles | Cycles among declared packages warn at load | Proposed |
 | 27 | Modules | Per-module runs against one root file; no aggregation | Proposed |
 | 28 | Core library | Shipped alongside the plugins with no build-tool dependency | Proposed |
+| 29 | Base package | A plugin input prefixes every declaration; rule prefixes follow when they point into the declared tree | Decided |
 
 ## Coverage check: gambit-sp-commons-guardrails
 

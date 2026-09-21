@@ -7,6 +7,7 @@ import community.flock.byterails.model.ConfigException
 import community.flock.byterails.model.ConfigProblem
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.Severity
+import community.flock.byterails.model.withBasePackage
 import community.flock.byterails.report.ConsoleReporter
 import community.flock.byterails.report.JsonReporter
 import community.flock.byterails.script.ScriptLoader
@@ -17,9 +18,13 @@ import java.util.function.Consumer
 /** The library entry points: load a rules file, validate a rule set, check class directories. */
 object Byterails {
 
-    /** Loads and validates a `byterails.kts` file. */
-    fun load(rulesFile: File, scriptCacheDir: File? = null): Loaded {
-        val ruleSet = ScriptLoader.load(rulesFile, scriptCacheDir)
+    /**
+     * Loads and validates a `byterails.kts` file.
+     *
+     * @param basePackage an optional package every declaration in the file is relative to; see [withBasePackage].
+     */
+    fun load(rulesFile: File, scriptCacheDir: File? = null, basePackage: String? = null): Loaded {
+        val ruleSet = ScriptLoader.load(rulesFile, scriptCacheDir).withBasePackage(basePackage)
         return Loaded(ruleSet, validate(ruleSet))
     }
 
@@ -48,8 +53,15 @@ object Byterails {
 object ByterailsRunner {
 
     @JvmStatic
-    fun run(rulesFile: File, classDirs: List<File>, reportFile: File?, scriptCacheDir: File?, out: Consumer<String>): Int {
-        val loaded = Byterails.load(rulesFile, scriptCacheDir)
+    fun run(
+        rulesFile: File,
+        classDirs: List<File>,
+        reportFile: File?,
+        scriptCacheDir: File?,
+        basePackage: String?,
+        out: Consumer<String>,
+    ): Int {
+        val loaded = Byterails.load(rulesFile, scriptCacheDir, basePackage)
         val result = Checker(loaded.ruleSet, loaded.warnings).check(ClassDirScanner.scan(classDirs))
         ConsoleReporter.render(result).forEach(out::accept)
         if (reportFile != null) {

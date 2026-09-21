@@ -12,6 +12,7 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.LocalState
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -35,6 +36,10 @@ abstract class ByterailsCheckTask : DefaultTask() {
     @get:Input
     abstract val reportOnly: Property<Boolean>
 
+    @get:Input
+    @get:Optional
+    abstract val basePackage: Property<String>
+
     @get:OutputFile
     abstract val reportFile: RegularFileProperty
 
@@ -47,7 +52,8 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val dirs = classDirs.files.filter { it.isDirectory }
         val report = reportFile.get().asFile
         val cache = scriptCacheDir.get().asFile
-        val violations = ToolRunner.run(toolClasspath.files, rules, dirs, report, cache) { line -> logger.lifecycle(line) }
+        val base = basePackage.orNull
+        val violations = ToolRunner.run(toolClasspath.files, rules, dirs, report, cache, base) { line -> logger.lifecycle(line) }
         if (violations > 0 && !reportOnly.get()) {
             val noun = if (violations == 1) "violation" else "violations"
             throw GradleException("byterails found $violations $noun; see the lines above or $report")

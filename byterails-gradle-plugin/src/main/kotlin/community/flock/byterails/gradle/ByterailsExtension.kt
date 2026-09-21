@@ -11,6 +11,14 @@ abstract class ByterailsExtension {
     abstract val rulesFile: RegularFileProperty
 
     /**
+     * A package every declaration in the rules file is relative to, for example `com.acme`, so the
+     * file can say `pkg("domain")` for `com.acme.domain`. A rule prefix is prefixed too when it points
+     * into the declared package tree, so `allow("domain")` and `allow("kotlin")` both mean what they
+     * say. Unset by default: every name in the file is then absolute.
+     */
+    abstract val basePackage: Property<String>
+
+    /**
      * When true, violations are printed and the build stays green. Defaults to the Gradle
      * property `byterails.reportOnly`, so `-Pbyterails.reportOnly=true` works without editing the build.
      */

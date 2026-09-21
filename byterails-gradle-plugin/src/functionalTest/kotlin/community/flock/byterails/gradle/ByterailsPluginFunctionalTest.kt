@@ -14,7 +14,7 @@ class ByterailsPluginFunctionalTest {
     private val toolClasspath: String = System.getProperty("byterails.toolClasspath")
         ?: error("system property byterails.toolClasspath is not set; run through Gradle")
 
-    private fun project(rules: String, vararg sources: Pair<String, String>): File {
+    private fun project(rules: String, vararg sources: Pair<String, String>, extra: String = ""): File {
         val dir = Files.createTempDirectory("byterails-functional").toFile()
         File(dir, "settings.gradle.kts").writeText("rootProject.name = \"sample\"\n")
         val files = toolClasspath.split(File.pathSeparator).joinToString(", ") { "\"${it.replace("\\", "\\\\")}\"" }
@@ -27,6 +27,7 @@ class ByterailsPluginFunctionalTest {
 
             byterails {
                 toolClasspath.setFrom(files($files))
+                $extra
             }
             """.trimIndent(),
         )
@@ -118,6 +119,28 @@ class ByterailsPluginFunctionalTest {
         assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 2 packages"), result.output)
         val report = File(dir, "build/reports/byterails/violations.json").readText()
         assertTrue(report.contains("\"kind\": \"EXCLUSIVE\""), report)
+    }
+
+    @Test
+    fun `basePackage makes the rules file relative to the project's root package`() {
+        val dir = project(
+            """
+            byterails {
+                allow("java.lang")
+                pkg("domain")
+                pkg("infra") {
+                    allow("domain")
+                    exclusive("java.util")
+                }
+            }
+            """,
+            domain, infra, offending,
+            extra = "basePackage.set(\"com.acme\")",
+        )
+        val result = runner(dir).buildAndFail()
+        assertTrue(result.output.contains("byterails: EXCLUSIVE    com.acme.domain.OrderList"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 2 packages"), result.output)
+        assertTrue(!result.output.contains("UNDECLARED"), result.output)
     }
 
     @Test

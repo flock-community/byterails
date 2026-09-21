@@ -7,7 +7,7 @@ import kotlin.system.exitProcess
 
 /**
  * `java -cp ... community.flock.byterails.cli.Main --rules byterails.kts --classes build/classes/kotlin/main [--classes ...]
- * [--report build/byterails.json] [--cache build/byterails-cache] [--report-only]`
+ * [--base-package com.acme] [--report build/byterails.json] [--cache build/byterails-cache] [--report-only]`
  *
  * Exit status: 0 clean, 1 violations, 2 configuration or usage error.
  */
@@ -19,6 +19,7 @@ object Main {
         val classes = mutableListOf<File>()
         var report: File? = null
         var cache: File? = null
+        var basePackage: String? = null
         var reportOnly = false
         var i = 0
         while (i < args.size) {
@@ -27,6 +28,7 @@ object Main {
                 "--classes" -> classes += (args.getOrNull(++i) ?: usage("--classes needs a directory")).split(File.pathSeparator).map(::File)
                 "--report" -> report = File(args.getOrNull(++i) ?: usage("--report needs a file"))
                 "--cache" -> cache = File(args.getOrNull(++i) ?: usage("--cache needs a directory"))
+                "--base-package" -> basePackage = args.getOrNull(++i) ?: usage("--base-package needs a package")
                 "--report-only" -> reportOnly = true
                 "--help", "-h" -> usage(null)
                 else -> usage("unknown argument $arg")
@@ -36,7 +38,7 @@ object Main {
         if (rules == null) usage("--rules is required")
         if (classes.isEmpty()) usage("--classes is required")
         val count = try {
-            ByterailsRunner.run(rules, classes, report, cache) { println(it) }
+            ByterailsRunner.run(rules, classes, report, cache, basePackage) { println(it) }
         } catch (e: ConfigException) {
             System.err.println(e.message)
             exitProcess(2)
@@ -47,7 +49,7 @@ object Main {
     private fun usage(problem: String?): Nothing {
         if (problem != null) System.err.println("byterails: $problem")
         System.err.println(
-            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--report <file>] [--cache <dir>] [--report-only]",
+            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--base-package <package>] [--report <file>] [--cache <dir>] [--report-only]",
         )
         exitProcess(2)
     }

@@ -18,17 +18,27 @@ internal object ToolRunner {
 
     private val loaders = ConcurrentHashMap<String, URLClassLoader>()
 
-    fun run(classpath: Set<File>, rulesFile: File, classDirs: List<File>, reportFile: File, cacheDir: File, out: Consumer<String>): Int {
+    fun run(
+        classpath: Set<File>,
+        rulesFile: File,
+        classDirs: List<File>,
+        reportFile: File,
+        cacheDir: File,
+        basePackage: String?,
+        out: Consumer<String>,
+    ): Int {
         if (classpath.isEmpty()) throw GradleException("byterails: the tool classpath is empty; set byterails.toolClasspath or check repositories")
         val loader = loaders.computeIfAbsent(classpath.joinToString(File.pathSeparator) { it.absolutePath }) { key ->
             URLClassLoader("byterails", classpath.map { it.toURI().toURL() }.toTypedArray(), ClassLoader.getPlatformClassLoader())
         }
         val runner = loader.loadClass(RUNNER_CLASS)
-        val method = runner.getMethod("run", File::class.java, List::class.java, File::class.java, File::class.java, Consumer::class.java)
+        val method = runner.getMethod(
+            "run", File::class.java, List::class.java, File::class.java, File::class.java, String::class.java, Consumer::class.java,
+        )
         val previous = Thread.currentThread().contextClassLoader
         Thread.currentThread().contextClassLoader = loader
         try {
-            return method.invoke(null, rulesFile, classDirs, reportFile, cacheDir, out) as Int
+            return method.invoke(null, rulesFile, classDirs, reportFile, cacheDir, basePackage, out) as Int
         } catch (e: InvocationTargetException) {
             val cause = e.targetException
             throw GradleException(cause.message ?: cause.toString(), cause)
