@@ -11,6 +11,7 @@ import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.SliceTemplate
 import community.flock.byterails.model.SourceLocation
+import community.flock.byterails.model.withDeclarationsOf
 
 @DslMarker
 annotation class ByterailsDsl
@@ -27,6 +28,8 @@ class ByterailsBuilder internal constructor() {
     private val rootRules = mutableListOf<Rule>()
     private val packages = mutableListOf<PackageDeclaration>()
     private var sliceTemplate: SliceTemplate? = null
+    /** Rule sets with slice declarations, placed at [build] once it is known whether the file has a slice block. */
+    private val layouts = mutableListOf<Pair<DefaultRules, SourceLocation?>>()
 
     /** Permits references to anything under [prefix] from every declared package. */
     fun allow(prefix: String) {
@@ -66,10 +69,21 @@ class ByterailsBuilder internal constructor() {
 
     /** The hexagonal default rules: a `domain` package under the base package without external dependencies. */
     fun hexagonal() {
-        packages += DefaultRules.HEXAGONAL.declarations(SourceLocation.capture())
+        packages += DefaultRules.HEXAGONAL.sliceDeclarations(SourceLocation.capture())
     }
 
-    fun build(): RuleSet = RuleSet(rootRules.toList(), packages.toList(), sliceTemplate)
+    /**
+     * The hexagonalSpring default rules: the application class and `config` under the base package, and
+     * the hexagonal Spring Boot layout in every slice when the file has a `slice { }` block, otherwise
+     * under the base package.
+     */
+    fun hexagonalSpring() {
+        layouts += DefaultRules.HEXAGONAL_SPRING to SourceLocation.capture()
+    }
+
+    fun build(): RuleSet = layouts.fold(RuleSet(rootRules.toList(), packages.toList(), sliceTemplate)) { ruleSet, (set, location) ->
+        ruleSet.withDeclarationsOf(set, location, sliced = ruleSet.sliceTemplate != null)
+    }
 }
 
 @ByterailsDsl
@@ -115,7 +129,7 @@ class SliceBuilder internal constructor(private val location: SourceLocation?) {
 
     /** The hexagonal default rules: a `domain` package in every slice without external dependencies. */
     fun hexagonal() {
-        packages += DefaultRules.HEXAGONAL.declarations(SourceLocation.capture())
+        packages += DefaultRules.HEXAGONAL.sliceDeclarations(SourceLocation.capture())
     }
 
     internal fun build(): SliceTemplate = SliceTemplate(exported.toList(), rules.toList(), naming, packages.toList(), location)
@@ -129,6 +143,7 @@ class PackageBuilder internal constructor(
     private val rules = mutableListOf<Rule>()
     private var naming: NamingRules? = null
     private var isolated = false
+    private var flat = false
 
     /**
      * Inherit nothing: not the root block, not enclosing declarations. Classes in this subtree may
@@ -136,6 +151,14 @@ class PackageBuilder internal constructor(
      */
     fun isolated() {
         isolated = true
+    }
+
+    /**
+     * The package itself only. A class in a sub-package is undeclared unless another declaration covers
+     * it, and such a declaration inherits nothing from this one.
+     */
+    fun flat() {
+        flat = true
     }
 
     /** Permits references from this subtree to anything under [prefix]. */
@@ -162,7 +185,7 @@ class PackageBuilder internal constructor(
         naming = NamingRules(patterns, location)
     }
 
-    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location, isolated)
+    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location, isolated, flat)
 }
 
 @ByterailsDsl

@@ -75,6 +75,10 @@ data class NamingRules(val patterns: List<NamePattern>, val location: SourceLoca
  * An [isolated] declaration inherits nothing: not the root block, not its enclosing declarations.
  * Its classes may reference only what the declaration itself lists and its own subtree, which is
  * how a domain package is kept free of every external dependency whatever the rest of the file allows.
+ *
+ * A [flat] declaration covers the package itself and nothing beneath it: a class in a sub-package
+ * is undeclared unless another declaration covers it, and the flat declaration neither encloses
+ * sub-package declarations nor passes its rules or naming down to them.
  */
 data class PackageDeclaration(
     val prefix: Prefix,
@@ -82,8 +86,19 @@ data class PackageDeclaration(
     val naming: NamingRules?,
     val location: SourceLocation?,
     val isolated: Boolean = false,
+    val flat: Boolean = false,
 ) {
     val name: String get() = prefix.name
+
+    /** True when [other] lies in the subtree this declaration covers; for a flat declaration, only the package itself. */
+    fun covers(other: Prefix): Boolean = if (flat) other == prefix else prefix.covers(other)
+
+    fun covers(className: ClassName): Boolean = if (flat) className.packageName == prefix.name else prefix.covers(className)
+
+    fun coversPackage(packageName: String): Boolean = if (flat) packageName == prefix.name else prefix.coversPackage(packageName)
+
+    /** True when a rule prefixed to [candidate] would point into this declaration's tree, either way round. */
+    fun touches(candidate: Prefix): Boolean = candidate.covers(prefix) || covers(candidate)
 }
 
 /**

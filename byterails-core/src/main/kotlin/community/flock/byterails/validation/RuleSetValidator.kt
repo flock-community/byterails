@@ -66,8 +66,8 @@ object RuleSetValidator {
                 val aOwner = a.origin!!
                 val bOwner = b.origin!!
                 // Narrowing inside the owner's own subtree is fine: the child claims part of what the parent owns.
-                val narrowing = (aOwner.prefix.covers(bOwner.prefix) && a.rule.prefix.covers(b.rule.prefix)) ||
-                    (bOwner.prefix.covers(aOwner.prefix) && b.rule.prefix.covers(a.rule.prefix))
+                val narrowing = (aOwner.covers(bOwner.prefix) && a.rule.prefix.covers(b.rule.prefix)) ||
+                    (bOwner.covers(aOwner.prefix) && b.rule.prefix.covers(a.rule.prefix))
                 if (narrowing) continue
                 problems += error(
                     "${b.rule.text} in \"${bOwner.name}\" clashes with ${a.rule.text} in \"${aOwner.name}\" " +
@@ -150,11 +150,12 @@ object RuleSetValidator {
         val declarations = resolved.declarations
         val index = declarations.withIndex().associate { (i, d) -> d to i }
         val edges = declarations.map { from ->
+            // An allow of the root prefix grants everything and describes no dependency, so it draws no edge.
             val targets = resolved.effectiveRules(from)
-                .filter { it.rule.kind != RuleKind.DENY && !it.rule.isExported }
+                .filter { it.rule.kind != RuleKind.DENY && !it.rule.isExported && !it.rule.prefix.isRoot }
                 .map { it.rule.prefix }
             declarations.filter { to ->
-                to !== from && targets.any { it.covers(to.prefix) || to.prefix.covers(it) }
+                to !== from && targets.any { it.covers(to.prefix) || to.covers(it) }
             }.map { index.getValue(it) }
         }
         for (component in Tarjan(declarations.size, edges).components()) {

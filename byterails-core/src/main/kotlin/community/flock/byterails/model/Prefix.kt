@@ -13,6 +13,9 @@ class Prefix private constructor(val segments: List<String>) : Comparable<Prefix
 
     val depth: Int get() = segments.size
 
+    /** True for [ROOT], the empty prefix that covers every name. */
+    val isRoot: Boolean get() = segments.isEmpty()
+
     /** True when [other] equals this prefix or lies beneath it. */
     fun covers(other: Prefix): Boolean = covers(other.segments)
 

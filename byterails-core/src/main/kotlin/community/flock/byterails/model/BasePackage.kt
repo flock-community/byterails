@@ -16,16 +16,16 @@ fun RuleSet.withBasePackage(basePackage: String?): RuleSet {
     } catch (e: IllegalArgumentException) {
         throw ConfigException("base package ${e.message}")
     }
-    val declared = packages.map { Prefix.concat(base, it.prefix) }
+    val declared = packages.map { it.copy(prefix = Prefix.concat(base, it.prefix)) }
     fun resolve(rule: Rule): Rule {
+        // The root prefix means "anything" and stays that way; it is never a name in the tree.
+        if (rule.prefix.isRoot) return rule
         val candidate = Prefix.concat(base, rule.prefix)
-        val pointsIntoTree = declared.any { candidate.covers(it) || it.covers(candidate) }
+        val pointsIntoTree = declared.any { it.touches(candidate) }
         return if (pointsIntoTree) rule.copy(prefix = candidate) else rule
     }
     return copy(
         rootRules = rootRules.map(::resolve),
-        packages = packages.zip(declared) { declaration, prefix ->
-            declaration.copy(prefix = prefix, rules = declaration.rules.map(::resolve))
-        },
+        packages = declared.map { declaration -> declaration.copy(rules = declaration.rules.map(::resolve)) },
     )
 }
