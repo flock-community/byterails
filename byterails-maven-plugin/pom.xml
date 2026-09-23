@@ -43,7 +43,7 @@
 
   <!--
     Built with Maven, not Gradle, because the plugin descriptor comes from maven-plugin-plugin.
-    byterails-core must be in the local repository first: ./gradlew publishToMavenLocal
+    byterails-core and byterails-rules must be in the local repository first: ./gradlew publishToMavenLocal
   -->
 
   <properties>
@@ -58,6 +58,11 @@
     <dependency>
       <groupId>community.flock.byterails</groupId>
       <artifactId>byterails-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>community.flock.byterails</groupId>
+      <artifactId>byterails-rules</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

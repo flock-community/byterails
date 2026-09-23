@@ -25,7 +25,7 @@ kotlin {
     }
 }
 
-// The core and its runtime dependencies, handed to the functional tests so they need no repository.
+// The tool: the default rules, the core and their runtime dependencies, handed to the functional tests so they need no repository.
 val byterailsTool: Configuration by configurations.creating {
     isCanBeConsumed = false
 }
@@ -36,7 +36,7 @@ configurations["functionalTestImplementation"].extendsFrom(configurations.testIm
 configurations["functionalTestRuntimeOnly"].extendsFrom(configurations.testRuntimeOnly.get())
 
 dependencies {
-    byterailsTool(project(":byterails-core"))
+    byterailsTool(project(":byterails-rules"))
 
     testImplementation(kotlin("test"))
     testImplementation(platform(libs.junit.bom))

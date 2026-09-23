@@ -6,7 +6,7 @@ plugins {
     `maven-publish`
 }
 
-description = "byterails core: rule model, byterails.kts loader, bytecode analysis and reporting"
+description = "byterails default rules: the java, kotlin, hexagonal and hexagonalSpring rule sets, written with the byterails DSL"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -21,25 +21,16 @@ kotlin {
     }
 }
 
-// Compiled Kotlin and Java snippets that the tests analyse. They are never shipped.
-val fixtures: SourceSet by sourceSets.creating
-
-// The fixture classes for the tests of other modules, a directory per language.
+// The compiled fixture classes of the core, which the tests here analyse as well.
 val fixtureClasses: Configuration by configurations.creating {
-    isCanBeConsumed = true
-    isCanBeResolved = false
-}
-fixtures.output.classesDirs.forEach { dir ->
-    artifacts.add(fixtureClasses.name, dir) { builtBy(fixtures.output) }
+    isCanBeConsumed = false
+    isCanBeResolved = true
 }
 
 dependencies {
-    implementation(libs.asm)
-    implementation(libs.kotlin.scripting.common)
-    implementation(libs.kotlin.scripting.jvm)
-    implementation(libs.kotlin.scripting.jvm.host)
+    api(project(":byterails-core"))
 
-    "fixturesImplementation"(kotlin("stdlib"))
+    fixtureClasses(project(mapOf("path" to ":byterails-core", "configuration" to "fixtureClasses")))
 
     testImplementation(kotlin("test"))
     testImplementation(platform(libs.junit.bom))
@@ -49,7 +40,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
-    val fixtureClassDirs: FileCollection = fixtures.output.classesDirs
+    val fixtureClassDirs: FileCollection = fixtureClasses.incoming.files
     inputs.files(fixtureClassDirs).withPropertyName("fixtureClassDirs").withPathSensitivity(PathSensitivity.RELATIVE)
     jvmArgumentProviders.add(FixturesArgument(fixtureClassDirs))
 }

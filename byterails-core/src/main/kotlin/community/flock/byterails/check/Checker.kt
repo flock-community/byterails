@@ -5,7 +5,7 @@ import community.flock.byterails.analysis.Reference
 import community.flock.byterails.analysis.Site
 import community.flock.byterails.model.ClassName
 import community.flock.byterails.model.ConfigProblem
-import community.flock.byterails.model.DefaultRules
+import community.flock.byterails.rules.DefaultRuleSet
 import community.flock.byterails.model.EffectiveRule
 import community.flock.byterails.model.PackageDeclaration
 import community.flock.byterails.model.Prefix
@@ -71,9 +71,9 @@ class Checker(ruleSet: RuleSet, private val warnings: List<ConfigProblem> = empt
         if (rules.any { it.rule.kind != RuleKind.DENY && it.rule.prefix.covers(target) }) return null
 
         val granted = rules.filter { it.rule.kind != RuleKind.DENY }
-        val sets = granted.mapNotNull { DefaultRules.of(it.rule) }.distinct()
+        val sets = granted.mapNotNull { DefaultRuleSet.of(it.rule) }.distinct()
         val allows = granted
-            .map { effective -> DefaultRules.of(effective.rule)?.let { "[${it.id}]" } ?: effective.rule.prefix.name }
+            .map { effective -> DefaultRuleSet.of(effective.rule)?.let { "[${it.id}]" } ?: effective.rule.prefix.name }
             .distinct()
             .sorted()
         val hints = listOfNotNull(

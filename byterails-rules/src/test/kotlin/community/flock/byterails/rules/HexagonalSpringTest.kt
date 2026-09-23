@@ -1,17 +1,12 @@
-package community.flock.byterails
+package community.flock.byterails.rules
 
-import community.flock.byterails.analysis.ClassDirScanner
-import community.flock.byterails.check.Checker
-import community.flock.byterails.check.ViolationKind
 import community.flock.byterails.dsl.byterails
 import community.flock.byterails.model.ClassName
-import community.flock.byterails.model.DefaultRules
 import community.flock.byterails.model.Prefix
 import community.flock.byterails.model.ResolvedRuleSet
 import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.withBasePackage
-import community.flock.byterails.model.withDefaultRules
 import community.flock.byterails.model.withSlices
 import community.flock.byterails.validation.RuleSetValidator
 import kotlin.test.Test
@@ -63,8 +58,8 @@ class HexagonalSpringTest {
         val config = declaration("com.acme.config")
         assertTrue(effective("com.acme.config").any { it.kind == RuleKind.ALLOW && it.prefix.isRoot })
         assertTrue(effective("com.acme").any { it.kind == RuleKind.ALLOW && it.prefix.isRoot }, "the base package rewrite must not turn the root allow into allow(\"com.acme\")")
-        assertTrue(config.rules.any { it.kind == RuleKind.EXCLUSIVE && it.prefix.name == DefaultRules.SPRING_CONFIGURATION })
-        val configuration = ClassName.fromDotted(DefaultRules.SPRING_CONFIGURATION)
+        assertTrue(config.rules.any { it.kind == RuleKind.EXCLUSIVE && it.prefix.name == HexagonalSpring.SPRING_CONFIGURATION })
+        val configuration = ClassName.fromDotted(HexagonalSpring.SPRING_CONFIGURATION)
         val owner = resolved.exclusiveGroups.single { it.prefix.covers(configuration) }
         assertEquals(listOf(config), owner.owners)
         assertTrue(Prefix.ROOT.covers(ClassName.fromDotted("org.apache.kafka.clients.producer.KafkaProducer")))
@@ -74,9 +69,9 @@ class HexagonalSpringTest {
     fun `the domain is isolated and flat and allows the standard libraries and stereotypes`() {
         val model = declaration("com.acme.orders.domain.model")
         assertTrue(model.isolated && model.flat)
-        assertEquals(DefaultRules.DOMAIN_BASELINE, effective("com.acme.orders.domain.model").map { it.prefix.name })
+        assertEquals(HexagonalSpring.DOMAIN_BASELINE, effective("com.acme.orders.domain.model").map { it.prefix.name })
         assertEquals(
-            DefaultRules.DOMAIN_BASELINE + "com.acme.orders.domain.model" + "com.acme.orders.domain.ports",
+            HexagonalSpring.DOMAIN_BASELINE + "com.acme.orders.domain.model" + "com.acme.orders.domain.ports",
             effective("com.acme.orders.domain.services").map { it.prefix.name },
         )
         assertEquals(listOf("endsWith(\"Port\")", "endsWith(\"PortKt\")"), declaration("com.acme.orders.domain.ports").naming?.patterns?.map { it.text })
@@ -96,7 +91,7 @@ class HexagonalSpringTest {
         assertTrue(inbound.any { it.kind == RuleKind.ALLOW && it.prefix.name == "com.acme.orders.application" })
         val controllers = effective("com.acme.orders.adapters.inbound.controllers")
         assertTrue(controllers.any { it.kind == RuleKind.ALLOW && it.prefix.name == "org.springframework.http" }, "an external prefix is never prefixed with the slice")
-        val webBind = resolved.exclusiveGroups.single { it.prefix.name == DefaultRules.SPRING_WEB_BIND }
+        val webBind = resolved.exclusiveGroups.single { it.prefix.name == HexagonalSpring.SPRING_WEB_BIND }
         assertEquals(listOf("com.acme.orders.adapters.inbound.controllers", "com.acme.customers.adapters.inbound.controllers"), webBind.owners.map { it.name })
         assertTrue(effective("com.acme.orders.adapters.inbound.controllers.error").any { it.prefix.name == "org.springframework.web" })
         val database = declaration("com.acme.orders.adapters.outbound.database")
@@ -139,25 +134,5 @@ class HexagonalSpringTest {
         }
         assertEquals(listOf("", "config"), sliced.packages.map { it.name })
         assertEquals(listOf("api", "domain.model"), sliced.sliceTemplate?.packages?.map { it.name }?.take(2))
-    }
-
-    @Test
-    fun `a flat declaration covers the package itself and nothing beneath it`() {
-        val rules = byterails {
-            allow("kotlin")
-            allow("java.lang")
-            allow("java.util")
-            allow("org.jetbrains.annotations")
-            pkg("fixtures.lib")
-            pkg("fixtures.app") { flat() }
-            pkg("fixtures.app.domain") { allow("fixtures.lib") }
-        }
-        val result = Checker(rules).check(ClassDirScanner.scan(Fixtures.classDirs))
-        val undeclared = result.violations.filter { it.kind == ViolationKind.UNDECLARED_PACKAGE }.map { it.className.packageName }.distinct()
-        assertTrue("fixtures.app.application" in undeclared && "fixtures.app.infra.web" in undeclared, undeclared.toString())
-        assertFalse("fixtures.app" in undeclared, "the flat package itself is declared")
-        assertFalse("fixtures.app.domain" in undeclared, "a declared sub-package is not affected")
-        val domainToInfra = result.violations.filter { it.className.packageName == "fixtures.app.domain" && it.target?.name?.startsWith("fixtures.app.infra") == true }
-        assertTrue(domainToInfra.all { it.kind == ViolationKind.NOT_ALLOWED }, "the flat parent no longer makes the whole app one subtree")
     }
 }

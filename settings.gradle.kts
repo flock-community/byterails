@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 
-include("byterails-core", "byterails-gradle-plugin")
+include("byterails-core", "byterails-rules", "byterails-gradle-plugin")

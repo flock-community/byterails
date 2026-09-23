@@ -13,8 +13,10 @@ same module, and the references it checks are the ones the compiler actually emi
 ## Installing
 
 The artifacts are published to Maven Central under the group `community.flock.byterails`:
-`byterails-core`, `byterails-gradle-plugin` with the plugin id `community.flock.byterails`, and
-`byterails-maven-plugin`. The Gradle plugin is resolved from Maven Central rather than the plugin
+`byterails-core`, `byterails-rules` with the rule sets described under [Default rules](#default-rules),
+`byterails-gradle-plugin` with the plugin id `community.flock.byterails`, and `byterails-maven-plugin`.
+Both plugins put the core and the default rules on the tool classpath; a project that uses the
+library directly depends on `byterails-rules`, which brings the core with it. The Gradle plugin is resolved from Maven Central rather than the plugin
 portal, so add it to the plugin repositories once:
 
 ```kotlin
@@ -85,6 +87,8 @@ byterails {
 | Matching | Prefixes match on dot boundaries: `com.acme.domain` covers `com.acme.domain.model`, not `com.acme.domainservice`. A prefix may name a class: `deny("java.lang.System")`. |
 | `naming { }` | Patterns (`endsWith`, `startsWith`, `matches`) on the simple class name. A class passes when one pattern matches. Nested and generated classes are skipped. |
 | `flat()` | The package itself only: a class in a sub-package is undeclared unless another declaration covers it, and such a declaration inherits nothing from the flat one. |
+| `basePackage { }` | The base package itself, as configured in the build; usually `flat()`, so it holds the entry point and its siblings stay separate subtrees. |
+| `allowAnything()` | Classes in this subtree may reference anything at all, short of what the root block denies and what another package owns. For the entry point and the wiring. |
 
 Every reference from a class in package P to a type T is decided in this order: T inside P's own
 declaration, T exclusive to another package, a deny in P's effective rules, an allow in P's effective
@@ -149,6 +153,32 @@ so does a build that names slices for a file without one, so the two sides canno
 byterails ships rule sets you apply by name. A default rule set expands into ordinary package
 declarations, so everything above about inheritance, matching and reporting applies to it unchanged.
 It can be applied from the build alone, with no `byterails.kts` at all, or on top of a rules file.
+
+The rule sets live in the `byterails-rules` module and are written with the same DSL as a rules
+file: one file per set in the package `community.flock.byterails.rules`, so what a set declares
+is read the way a `byterails.kts` is read. This is the whole of `hexagonal`:
+
+```kotlin
+object Hexagonal : DefaultRuleSet(
+    id = "hexagonal",
+    description = "a domain package without external dependencies, in every slice",
+    allowsLabel = "the language baseline: ${LANGUAGE_BASELINE.joinToString(", ")}",
+) {
+    override fun ByterailsBuilder.rules() {
+        slice {
+            pkg("domain") {
+                isolated()
+                LANGUAGE_BASELINE.forEach { allow(it) }
+            }
+        }
+    }
+}
+```
+
+Top-level declarations of a set are relative to the base package, and its `slice { }` block holds
+what every slice gets: with slices configured it joins the slice template, without it goes under the
+base package. The core finds the sets through a service-loader provider, so a rule set of your own is
+a class like the one above, listed by a `DefaultRuleSetProvider` in `META-INF/services`.
 
 ### The rule sets
 
@@ -319,9 +349,11 @@ rules are set fails the build with a message naming the expected path.
 ### In the rules file and by hand
 
 The same rule sets are available as calls in the rules file, for teams that keep everything in one
-place: `java()` and `kotlin()` at the top level, `hexagonal()` at the top level or inside `slice { }`,
-and `hexagonalSpring()` at the top level, which puts the slice part into the file's `slice { }` block
-when there is one. The building blocks behind them are available on any package:
+place: `java()`, `kotlin()`, `hexagonal()` and `hexagonalSpring()` at the top level, and `hexagonal()`
+inside `slice { }` as well. A set's slice part goes into the file's `slice { }` block when there is
+one and under the base package otherwise, wherever in the file the call is. Any rule set built with
+the DSL can be applied the same way with `include(ruleSet)`. The building blocks behind the sets are
+available on any package:
 
 ```kotlin
 pkg("domain") {
@@ -336,7 +368,9 @@ pkg("domain.model") {
 ```
 
 The CLI takes `--default-rules kotlin,hexagonal`. Naming a rule set that does not exist is a
-configuration error that lists the known ids; naming one twice is folded into one.
+configuration error that lists the known ids; naming one twice is folded into one. From compiled
+code the keywords are extension functions in `community.flock.byterails.rules`, so a test that
+builds rules with `byterails { kotlin(); hexagonal() }` imports them from there.
 
 ## Gradle
 
@@ -409,7 +443,7 @@ because both call the same core.
 The core ships a small CLI, exit status 1 on violations and 2 on a broken rules file:
 
 ```
-java -cp <byterails-core and its dependencies> community.flock.byterails.cli.Main \
+java -cp <byterails-rules, byterails-core and their dependencies> community.flock.byterails.cli.Main \
     --rules byterails.kts --classes build/classes/kotlin/main:build/classes/java/main \
     --report build/byterails.json --report-only
 ```
@@ -455,7 +489,7 @@ questions are in [docs/PRD.md](docs/PRD.md).
 
 The Gradle build compiles a corpus of Kotlin and Java fixtures and asserts where every kind of
 reference is found, runs the Gradle plugin against real builds with TestKit, and checks
-`byterails-core` against this repository's own [`byterails.kts`](byterails.kts). The Maven plugin is
+`byterails-core` and `byterails-rules` against this repository's own [`byterails.kts`](byterails.kts). The Maven plugin is
 built by Maven, because its descriptor comes from Maven's plugin tooling, and runs its integration
 tests against sample projects with the invoker plugin.
 
