@@ -318,14 +318,9 @@ Decided rows come from the design interview of 20 September 2026. Proposed rows 
 | 30 | Slices | The rules file describes one slice in a slice block; the build names the slices; exported packages are the only cross-slice references; template exclusives are owned by every slice together | Decided |
 | 31 | Default rules | Shipped rule sets applied by id from the file or the build: java and kotlin allow the standard libraries everywhere, hexagonal declares an isolated domain package per slice with the language baseline only; rule-set allows show as one token and are never dead | Decided |
 
-## Coverage check: gambit-sp-commons-guardrails
+## Coverage check: source-level guardrails
 
-The guardrails module could not be read when this PRD was written: the repository belongs to another GitHub organisation and was not reachable from the session. Two ways to unblock the check:
-
-- [ ] Start a new session with RoyalAholdDelhaize/gambit-sp-commons as its source and point it at this PRD.
-- [ ] Paste the rule classes from that module into the conversation.
-
-Until then, the table maps the rule categories an ArchUnit-based guardrails module usually contains onto this PRD. It is the template for the real check, not a statement about that module.
+Teams adopting byterails usually replace an ArchUnit- or Konsist-based guardrails module. The table maps the rule categories such a module contains onto this PRD, with the byterails config that expresses each or the reason it cannot.
 
 | Rule category | Typical ArchUnit form | byterails | How |
 | --- | --- | --- | --- |
@@ -345,8 +340,6 @@ Until then, the table maps the rule categories an ArchUnit-based guardrails modu
 | Access modifiers | utility classes have a private constructor | No | non-goal for 1.0 |
 | Test conventions | test classes end with Test | No | test scope excluded, FR-10 |
 
-Once the real rule list is available this table is replaced by one row per rule in that module, with the byterails config that expresses it or the reason it cannot.
-
 ## Open questions
 
 Each of these changes a requirement above once answered.
@@ -358,7 +351,6 @@ Each of these changes a requirement above once answered.
 - [ ] Should the plugin take a package filter, so a team adopting byterails can make one package green at a time?
 - [ ] How are breaking changes to the DSL communicated, given the rules file compiles against the plugin version?
 - [ ] JSON export of the rule model, for diffs and diagrams: 0.2 or 1.0?
-- [ ] The gambit-sp-commons-guardrails coverage check, blocked on access to that repository.
 
 ## Milestones
 
