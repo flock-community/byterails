@@ -1,7 +1,7 @@
 package community.flock.byterails.validation
 
 import community.flock.byterails.model.ConfigProblem
-import community.flock.byterails.model.DefaultRules
+import community.flock.byterails.rules.DefaultRuleSet
 import community.flock.byterails.model.EffectiveRule
 import community.flock.byterails.model.PackageDeclaration
 import community.flock.byterails.model.Prefix
@@ -106,7 +106,7 @@ object RuleSetValidator {
             declaration.rules.filter { it.kind == RuleKind.ALLOW }.map { EffectiveRule(it, declaration) }
         }
         for (allow in allAllows) {
-            if (DefaultRules.of(allow.rule) != null) continue
+            if (DefaultRuleSet.of(allow.rule) != null) continue
             for (group in resolved.exclusiveGroups) {
                 if (!group.prefix.covers(allow.rule.prefix)) continue
                 if (resolved.isInside(allow.origin, group)) continue
@@ -127,7 +127,7 @@ object RuleSetValidator {
         problems: MutableList<ConfigProblem>,
     ) {
         if (!deny.rule.prefix.covers(allow.rule.prefix)) return
-        if (DefaultRules.of(allow.rule) != null) return
+        if (DefaultRuleSet.of(allow.rule) != null) return
         if (!reported.add(allow.rule to deny.rule)) return
         problems += error(
             "${allow.rule.text} in ${describe(allow)} can never apply: it is shadowed by ${deny.rule.text} in " +

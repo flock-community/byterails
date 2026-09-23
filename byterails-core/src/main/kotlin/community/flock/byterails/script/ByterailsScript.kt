@@ -30,7 +30,7 @@ abstract class ByterailsScript {
 }
 
 object ByterailsScriptCompilationConfiguration : ScriptCompilationConfiguration({
-    defaultImports("community.flock.byterails.dsl.*")
+    defaultImports("community.flock.byterails.dsl.*", "community.flock.byterails.rules.*")
     jvm {
         dependenciesFromClassContext(ByterailsScript::class, wholeClasspath = true)
     }

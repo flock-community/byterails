@@ -1,7 +1,6 @@
 package community.flock.byterails.dsl
 
 import community.flock.byterails.model.ConfigException
-import community.flock.byterails.model.DefaultRules
 import community.flock.byterails.model.NamePattern
 import community.flock.byterails.model.NamingRules
 import community.flock.byterails.model.PackageDeclaration
@@ -11,7 +10,7 @@ import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.SliceTemplate
 import community.flock.byterails.model.SourceLocation
-import community.flock.byterails.model.withDeclarationsOf
+import community.flock.byterails.model.including
 
 @DslMarker
 annotation class ByterailsDsl
@@ -22,29 +21,43 @@ annotation class ByterailsDsl
  */
 fun byterails(block: ByterailsBuilder.() -> Unit): RuleSet = ByterailsBuilder().apply(block).build()
 
+/**
+ * @param group the group every rule written through this builder carries, or null for a rules file.
+ *   The default rule sets are written with this builder and stamp their rules with `default:<id>`.
+ */
 @ByterailsDsl
-class ByterailsBuilder internal constructor() {
+class ByterailsBuilder internal constructor(private val group: String? = null) {
 
     private val rootRules = mutableListOf<Rule>()
     private val packages = mutableListOf<PackageDeclaration>()
     private var sliceTemplate: SliceTemplate? = null
-    /** Rule sets with slice declarations, placed at [build] once it is known whether the file has a slice block. */
-    private val layouts = mutableListOf<Pair<DefaultRules, SourceLocation?>>()
+    /** Rule sets applied by name, merged at [build] once it is known whether the file has a slice block. */
+    private val included = mutableListOf<RuleSet>()
 
     /** Permits references to anything under [prefix] from every declared package. */
     fun allow(prefix: String) {
-        rootRules += rule(RuleKind.ALLOW, prefix)
+        rootRules += rule(RuleKind.ALLOW, prefix, group)
     }
 
     /** Forbids references to anything under [prefix] from every declared package. */
     fun deny(prefix: String) {
-        rootRules += rule(RuleKind.DENY, prefix)
+        rootRules += rule(RuleKind.DENY, prefix, group)
     }
 
     /** Declares that the package [name] and its sub-packages may exist, with their own rules. */
     fun pkg(name: String, block: PackageBuilder.() -> Unit = {}) {
         val location = SourceLocation.capture()
-        packages += PackageBuilder(parsePrefix(name, location), location).apply(block).build()
+        packages += PackageBuilder(parsePrefix(name, location), location, group).apply(block).build()
+    }
+
+    /**
+     * Declares the base package itself: the package every declaration in this file is relative to, as
+     * configured in the build. Usually [PackageBuilder.flat], so that it holds the entry point and
+     * nothing else and its siblings stay separate subtrees.
+     */
+    fun basePackage(block: PackageBuilder.() -> Unit = {}) {
+        val location = SourceLocation.capture()
+        packages += PackageBuilder(Prefix.ROOT, location, group).apply(block).build()
     }
 
     /**
@@ -54,40 +67,26 @@ class ByterailsBuilder internal constructor() {
     fun slice(block: SliceBuilder.() -> Unit) {
         val location = SourceLocation.capture()
         if (sliceTemplate != null) throw ConfigException("slice { } may appear only once", location)
-        sliceTemplate = SliceBuilder(location).apply(block).build()
-    }
-
-    /** The `java` default rules: the Java standard library, allowed in every package. */
-    fun java() {
-        rootRules += DefaultRules.JAVA.rootRules(SourceLocation.capture())
-    }
-
-    /** The `kotlin` default rules: the Kotlin standard library and the Java one it compiles to, allowed in every package. */
-    fun kotlin() {
-        rootRules += DefaultRules.KOTLIN.rootRules(SourceLocation.capture())
-    }
-
-    /** The hexagonal default rules: a `domain` package under the base package without external dependencies. */
-    fun hexagonal() {
-        packages += DefaultRules.HEXAGONAL.sliceDeclarations(SourceLocation.capture())
+        sliceTemplate = SliceBuilder(location, group).apply(block).build()
     }
 
     /**
-     * The hexagonalSpring default rules: the application class and `config` under the base package, and
-     * the hexagonal Spring Boot layout in every slice when the file has a `slice { }` block, otherwise
-     * under the base package.
+     * Adds a rule set written with this DSL, which is how the default rule sets are applied. Its root
+     * rules join the root block, its declarations go under the base package, and its `slice { }`
+     * packages go into this file's `slice { }` block when there is one and under the base package
+     * otherwise. Applied at [build], so it does not matter where in the file it is called.
      */
-    fun hexagonalSpring() {
-        layouts += DefaultRules.HEXAGONAL_SPRING to SourceLocation.capture()
+    fun include(ruleSet: RuleSet) {
+        included += ruleSet
     }
 
-    fun build(): RuleSet = layouts.fold(RuleSet(rootRules.toList(), packages.toList(), sliceTemplate)) { ruleSet, (set, location) ->
-        ruleSet.withDeclarationsOf(set, location, sliced = ruleSet.sliceTemplate != null)
+    fun build(): RuleSet = included.fold(RuleSet(rootRules.toList(), packages.toList(), sliceTemplate)) { ruleSet, set ->
+        ruleSet.including(set, sliced = ruleSet.sliceTemplate != null)
     }
 }
 
 @ByterailsDsl
-class SliceBuilder internal constructor(private val location: SourceLocation?) {
+class SliceBuilder internal constructor(private val location: SourceLocation?, private val group: String? = null) {
     private val exported = mutableListOf<Prefix>()
     private val rules = mutableListOf<Rule>()
     private var naming: NamingRules? = null
@@ -100,16 +99,16 @@ class SliceBuilder internal constructor(private val location: SourceLocation?) {
 
     /** Rules of the slice root itself, inherited by the slice's packages. */
     fun allow(prefix: String) {
-        rules += rule(RuleKind.ALLOW, prefix)
+        rules += rule(RuleKind.ALLOW, prefix, group)
     }
 
     fun deny(prefix: String) {
-        rules += rule(RuleKind.DENY, prefix)
+        rules += rule(RuleKind.DENY, prefix, group)
     }
 
     /** Owned by the root of every slice together, and by nothing outside the slices. */
     fun exclusive(prefix: String) {
-        rules += rule(RuleKind.EXCLUSIVE, prefix)
+        rules += rule(RuleKind.EXCLUSIVE, prefix, group)
     }
 
     /** Naming for classes directly in a slice root. */
@@ -124,12 +123,12 @@ class SliceBuilder internal constructor(private val location: SourceLocation?) {
     /** A package of the template, relative to each slice: `pkg("domain")` is `<slice>.domain`. */
     fun pkg(name: String, block: PackageBuilder.() -> Unit = {}) {
         val location = SourceLocation.capture()
-        packages += PackageBuilder(parsePrefix(name, location), location).apply(block).build()
+        packages += PackageBuilder(parsePrefix(name, location), location, group).apply(block).build()
     }
 
-    /** The hexagonal default rules: a `domain` package in every slice without external dependencies. */
-    fun hexagonal() {
-        packages += DefaultRules.HEXAGONAL.sliceDeclarations(SourceLocation.capture())
+    /** Adds the slice packages of a rule set written with this DSL, which is how a default rule set is applied inside `slice { }`. */
+    fun include(ruleSet: RuleSet) {
+        packages += ruleSet.sliceTemplate?.packages.orEmpty()
     }
 
     internal fun build(): SliceTemplate = SliceTemplate(exported.toList(), rules.toList(), naming, packages.toList(), location)
@@ -139,6 +138,7 @@ class SliceBuilder internal constructor(private val location: SourceLocation?) {
 class PackageBuilder internal constructor(
     private val prefix: Prefix,
     private val location: SourceLocation?,
+    private val group: String? = null,
 ) {
     private val rules = mutableListOf<Rule>()
     private var naming: NamingRules? = null
@@ -163,17 +163,26 @@ class PackageBuilder internal constructor(
 
     /** Permits references from this subtree to anything under [prefix]. */
     fun allow(prefix: String) {
-        rules += rule(RuleKind.ALLOW, prefix)
+        rules += rule(RuleKind.ALLOW, prefix, group)
+    }
+
+    /**
+     * Permits references from this subtree to anything at all, short of what the root block denies and
+     * what another package owns. For the entry point and the wiring of an application, which touch
+     * every layer and every library.
+     */
+    fun allowAnything() {
+        rules += Rule(RuleKind.ALLOW, Prefix.ROOT, SourceLocation.capture(), group)
     }
 
     /** Forbids references from this subtree to anything under [prefix]. Deny always wins over allow. */
     fun deny(prefix: String) {
-        rules += rule(RuleKind.DENY, prefix)
+        rules += rule(RuleKind.DENY, prefix, group)
     }
 
     /** Permits [prefix] here and forbids it in every package outside this subtree. */
     fun exclusive(prefix: String) {
-        rules += rule(RuleKind.EXCLUSIVE, prefix)
+        rules += rule(RuleKind.EXCLUSIVE, prefix, group)
     }
 
     /** Constrains the simple names of classes in this subtree. A class passes when one pattern matches. */
@@ -220,9 +229,15 @@ class NamingBuilder internal constructor() {
     }
 }
 
-private fun rule(kind: RuleKind, prefix: String): Rule {
+/**
+ * One rule as written. Rules of a grouped builder carry the group; an exclusive gets a group of its
+ * own, `<group>:<prefix>`, so that two exclusives of one rule set are never taken for one claim.
+ */
+private fun rule(kind: RuleKind, prefix: String, group: String?): Rule {
     val location = SourceLocation.capture()
-    return Rule(kind, parsePrefix(prefix, location), location)
+    val parsed = parsePrefix(prefix, location)
+    val ruleGroup = if (kind == RuleKind.EXCLUSIVE) group?.let { "$it:${parsed.name}" } else group
+    return Rule(kind, parsed, location, ruleGroup)
 }
 
 private fun parsePrefix(text: String, location: SourceLocation?): Prefix =

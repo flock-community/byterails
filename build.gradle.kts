@@ -69,3 +69,41 @@ subprojects {
         }
     }
 }
+
+// The modules that make up the tool are checked against the repository's own byterails.kts on every
+// build. The core alone loads the file without the default rules on the classpath, which is how a
+// library user without byterails-rules sees it; the rules module is checked with both.
+val selfChecked = setOf("byterails-core", "byterails-rules")
+
+subprojects {
+    if (name !in selfChecked) return@subprojects
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        val main = extensions.getByType<SourceSetContainer>().named("main")
+        val selfCheck = tasks.register<JavaExec>("byterailsSelfCheck") {
+            description = "Checks ${project.name} against the repository's own byterails.kts"
+            group = "verification"
+            classpath = main.get().runtimeClasspath
+            mainClass.set("community.flock.byterails.cli.Main")
+            val rules = rootProject.layout.projectDirectory.file("byterails.kts").asFile
+            val classes: FileCollection = main.get().output.classesDirs
+            val report = layout.buildDirectory.file("reports/byterails/self-check.json").get().asFile
+            val cache = layout.buildDirectory.dir("byterails/script-cache").get().asFile
+            inputs.file(rules).withPropertyName("rules").withPathSensitivity(PathSensitivity.NONE)
+            inputs.files(classes).withPropertyName("classes").withPathSensitivity(PathSensitivity.RELATIVE)
+            outputs.file(report)
+            argumentProviders.add(SelfCheckArguments(rules, classes, report, cache))
+        }
+        tasks.named("check") { dependsOn(selfCheck) }
+    }
+}
+
+/** A named class rather than a lambda, so the configuration cache never sees the build script object. */
+class SelfCheckArguments(
+    private val rules: File,
+    private val classes: FileCollection,
+    private val report: File,
+    private val cache: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> =
+        listOf("--rules", rules.path, "--classes", classes.asPath, "--report", report.path, "--cache", cache.path)
+}

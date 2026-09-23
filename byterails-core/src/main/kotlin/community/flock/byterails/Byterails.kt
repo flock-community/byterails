@@ -8,7 +8,7 @@ import community.flock.byterails.model.ConfigProblem
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.Severity
 import community.flock.byterails.model.withBasePackage
-import community.flock.byterails.model.withDefaultRules
+import community.flock.byterails.rules.withDefaultRules
 import community.flock.byterails.model.withSlices
 import community.flock.byterails.report.ConsoleReporter
 import community.flock.byterails.report.JsonReporter
@@ -25,7 +25,7 @@ object Byterails {
      *
      * @param basePackage an optional package every declaration in the file is relative to; see [withBasePackage].
      * @param slices the slices the file's `slice { }` block applies to, relative to the base package; see [withSlices].
-     * @param defaultRules ids of the rule sets byterails ships, see [DefaultRules]; with any of them the rules file may be absent.
+     * @param defaultRules ids of the rule sets byterails ships, see `DefaultRuleSet`; with any of them the rules file may be absent.
      */
     fun load(
         rulesFile: File?,

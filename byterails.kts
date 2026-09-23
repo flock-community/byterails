@@ -1,4 +1,4 @@
-// The rules byterails-core is checked against on every build (task byterailsSelfCheck).
+// The rules byterails-core and byterails-rules are checked against on every build (task byterailsSelfCheck).
 byterails {
     // Every Kotlin class references these; nothing else is allowed unless a package says so.
     allow("kotlin")
@@ -22,8 +22,15 @@ byterails {
         }
     }
 
+    // The default rule sets: an API in the core, the shipped sets in byterails-rules, both written with the DSL.
+    pkg("community.flock.byterails.rules") {
+        allow("community.flock.byterails.model")
+        allow("community.flock.byterails.dsl")
+    }
+
     pkg("community.flock.byterails.validation") {
         allow("community.flock.byterails.model")
+        allow("community.flock.byterails.rules")
         naming {
             endsWith("Validator")
             matches("Tarjan")
@@ -37,6 +44,7 @@ byterails {
 
     pkg("community.flock.byterails.check") {
         allow("community.flock.byterails.model")
+        allow("community.flock.byterails.rules")
         allow("community.flock.byterails.analysis")
     }
 

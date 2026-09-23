@@ -113,3 +113,27 @@ data class RuleSet(
     val packages: List<PackageDeclaration>,
     val sliceTemplate: SliceTemplate? = null,
 )
+
+/**
+ * This rule set plus [other], which is how a default rule set joins a rules file or a build.
+ *
+ * Root rules of [other] join the root block, minus the ones this set already has. Its declarations
+ * go under the base package. The packages of its slice template go into this set's template when
+ * [sliced], creating one when the rules file has none, and under the base package otherwise, so a
+ * layout written per slice applies unchanged to a service with a single slice. Nothing else of the
+ * other template is taken.
+ */
+fun RuleSet.including(other: RuleSet, sliced: Boolean): RuleSet {
+    val roots = other.rootRules.filter { rule -> rootRules.none { it.kind == rule.kind && it.prefix == rule.prefix } }
+    val slicePackages = other.sliceTemplate?.packages.orEmpty()
+    return if (sliced) {
+        val template = sliceTemplate ?: SliceTemplate(emptyList(), emptyList(), null, emptyList(), other.sliceTemplate?.location)
+        copy(
+            rootRules = rootRules + roots,
+            packages = packages + other.packages,
+            sliceTemplate = template.copy(packages = template.packages + slicePackages),
+        )
+    } else {
+        copy(rootRules = rootRules + roots, packages = packages + other.packages + slicePackages)
+    }
+}

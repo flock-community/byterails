@@ -18,9 +18,9 @@ class ByterailsPlugin : Plugin<Project> {
         val tool = project.configurations.create(TOOL_CONFIGURATION) { configuration ->
             configuration.isCanBeConsumed = false
             configuration.isVisible = false
-            configuration.description = "The byterails core used by the byterailsCheck task"
+            configuration.description = "The byterails core and default rules used by the byterailsCheck task"
             configuration.defaultDependencies { dependencies ->
-                dependencies.add(project.dependencies.create("community.flock.byterails:byterails-core:${pluginVersion()}"))
+                dependencies.add(project.dependencies.create("community.flock.byterails:byterails-rules:${pluginVersion()}"))
             }
         }
         extension.toolClasspath.from(tool)
