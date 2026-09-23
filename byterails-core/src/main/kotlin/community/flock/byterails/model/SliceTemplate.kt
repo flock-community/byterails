@@ -22,12 +22,14 @@ data class SliceTemplate(
         val id = location?.toString() ?: "slice"
         return slices.flatMap { sliceRoot ->
             // The slice root would cover any candidate, so only the template packages decide what is relative.
-            val templatePackages = packages.map { Prefix.concat(sliceRoot, it.prefix) }
+            val templatePackages = packages.map { it.copy(prefix = Prefix.concat(sliceRoot, it.prefix)) }
             fun resolve(rule: Rule): Rule {
+                if (rule.prefix.isRoot) return rule
                 val candidate = Prefix.concat(sliceRoot, rule.prefix)
-                val pointsIntoSlice = templatePackages.any { candidate.covers(it) || it.covers(candidate) }
-                // A template exclusive is owned by every slice together; any other rule keeps the group it came with.
-                val group = if (rule.kind == RuleKind.EXCLUSIVE) "$id:${rule.prefix.name}" else rule.group
+                val pointsIntoSlice = templatePackages.any { it.touches(candidate) }
+                // A template exclusive is owned by every slice together, so one line gets one group; a rule
+                // set's exclusive already carries such a group, and any other rule keeps the group it came with.
+                val group = if (rule.kind == RuleKind.EXCLUSIVE) rule.group ?: "$id:${rule.prefix.name}" else rule.group
                 return rule.copy(prefix = if (pointsIntoSlice) candidate else rule.prefix, group = group)
             }
             val exportedAllows = slices.filter { it != sliceRoot }.flatMap { other ->

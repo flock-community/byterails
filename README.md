@@ -84,6 +84,7 @@ byterails {
 | Inheritance | A package's effective rules are its own plus those of every enclosing declaration and the root block. A child may add allows and may deny what it inherited. |
 | Matching | Prefixes match on dot boundaries: `com.acme.domain` covers `com.acme.domain.model`, not `com.acme.domainservice`. A prefix may name a class: `deny("java.lang.System")`. |
 | `naming { }` | Patterns (`endsWith`, `startsWith`, `matches`) on the simple class name. A class passes when one pattern matches. Nested and generated classes are skipped. |
+| `flat()` | The package itself only: a class in a sub-package is undeclared unless another declaration covers it, and such a declaration inherits nothing from the flat one. |
 
 Every reference from a class in package P to a type T is decided in this order: T inside P's own
 declaration, T exclusive to another package, a deny in P's effective rules, an allow in P's effective
@@ -156,6 +157,7 @@ It can be applied from the build alone, with no `byterails.kts` at all, or on to
 | `java` | The Java standard library, allowed in every package: the whole `java` namespace, the `javax` and `com.sun` packages the JDK itself exports, the `jdk` namespace, and the W3C DOM, SAX and JGSS packages. Not `javax` as a whole, because `javax.persistence`, `javax.inject` and friends are libraries, not the JDK. | Nothing by itself; it is the grant every Java project needs, so the rules file only has to say what is specific to the application. |
 | `kotlin` | The Kotlin standard library, allowed in every package: `kotlin`, the `org.jetbrains.annotations` the compiler writes into every class, and everything in `java`, because Kotlin's collections, strings and boxed numbers compile to `java.util` and `java.lang`. | Nothing by itself; a Kotlin project needs no other root allows. |
 | `hexagonal` | A `domain` package that cannot have any external dependency. With slices configured, one in every slice; without, one under the base package. The package is *isolated*: it inherits nothing from the root block or an enclosing declaration, and may reference only the language baseline and its own subtree. | Any class in `domain` that touches a framework, a library, an adapter or another package of the application, whatever the rest of the rules file allows. |
+| `hexagonalSpring` | The hexagonal layout of a vertically sliced Spring Boot service: the application class and a `config` package under the base package, and in every slice an isolated `domain` split into `model`, `ports` and `services`, an `application` layer, and `adapters.inbound` and `adapters.outbound` with fixed places for controllers and database code. See [The hexagonalSpring layout](#the-hexagonalspring-layout). | A package outside the layout, a dependency pointing outwards, a `@Configuration` outside `config`, a Spring web annotation outside `controllers`, a controller using more of Spring than HTTP needs, persistence code outside `adapters.outbound.database`, a misnamed port, service or configuration class. |
 
 The language baseline is what a class needs to exist plus the value types a domain model is made of:
 `kotlin`, `org.jetbrains.annotations`, `java.lang`, `java.util`, `java.time`, `java.math` and
@@ -174,6 +176,51 @@ byterails: NOT ALLOWED  com.acme.sales.domain.Leak
   allows   [hexagonal]
   source   Leak.java
   hint     [hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text
+```
+
+### The hexagonalSpring layout
+
+`hexagonalSpring` is the whitelist form of a layout in common use for Spring Boot services. It needs a base package and is meant for a sliced service; without slices the slice
+part goes under the base package. Under `com.acme` with slices `orders` and `customers` it declares:
+
+| Package | May reference | Named |
+| --- | --- | --- |
+| `com.acme` (flat) | anything the root block does not deny and no other package owns | `*Application` |
+| `com.acme.config` | anything, as above; owns `org.springframework.context.annotation.Configuration` | `*Config` |
+| `<slice>.domain.model` (flat, isolated) | `kotlin`, `org.jetbrains.annotations`, `java`, `org.springframework.stereotype` | |
+| `<slice>.domain.ports` (flat, isolated) | the same plus `domain.model` | `*Port` |
+| `<slice>.domain.services` (flat, isolated) | the same plus `domain.model` and `domain.ports` | `*Service` |
+| `<slice>.application` | `domain.*`, `org.springframework.stereotype`; denies `adapters.outbound` | |
+| `<slice>.adapters.inbound` | `domain.model`, `domain.services`, `application`; denies `domain.ports` and `adapters.outbound` | |
+| `<slice>.adapters.inbound.controllers` | plus `org.springframework.http`, `.security.access.prepost`, `.validation.annotation`, `.web.multipart`; owns `org.springframework.web.bind.annotation` | |
+| `<slice>.adapters.inbound.controllers.error` | plus `org.springframework.dao`, `.security.access`, `.stereotype`, `.validation`, `.web` | |
+| `<slice>.adapters.outbound` | `domain.model`, `domain.ports`, `org.springframework.stereotype`; denies `domain.services` and `adapters.inbound` | |
+| `<slice>.adapters.outbound.database` (flat) | plus Spring Data, JPA, jOOQ, MongoDB, R2DBC, Exposed, and its `model` and `mappers` | |
+| `<slice>.adapters.outbound.database.mappers` (flat) | plus `database.model` | |
+| `<slice>.adapters.outbound.database.model` (flat) | plus the persistence libraries | |
+
+A naming rule on a file-name convention accepts the `Kt` facade too, so `OrderPort.kt` with
+top-level functions passes as `OrderPortKt`. Everything except the domain inherits the root block
+and the slice root, which is how a rules file widens the layout: `allow("org.slf4j")` in `slice { }`
+reaches every adapter, and a sub-package declaration such as `pkg("adapters.inbound.kafka") {
+allow("org.springframework.kafka") }` gives one adapter what only it needs. The domain is isolated
+and flat, so it cannot be widened; a logging library the domain needs is not expressible with this
+rule set. The slice root is declared as always, so a class directly in `<slice>` or `<slice>.domain`
+is not undeclared; it gets the slice root's rules, which allow nothing of the domain.
+
+What source-level guardrails for this layout usually check and this rule set does not: rules conditioned on annotations, supertypes
+or function names (`@RestController` classes ending with `Controller`, outbound `*Adapter` classes
+implementing a port, `toDomain` mappers living in `mappers`), a `@RequestBody` parameter that is a
+domain type, the Kafka listener and sender conventions, integration-test conventions, and inline
+fully qualified names. Those are source-level or member-level rules; see the PRD for what is planned.
+
+```kotlin
+// build.gradle.kts: the layout from the build alone
+byterails {
+    basePackage.set("com.acme")
+    slices.set(listOf("orders", "customers"))
+    defaultRules.set(listOf("kotlin", "hexagonalSpring"))
+}
 ```
 
 ### Gradle
@@ -272,14 +319,19 @@ rules are set fails the build with a message naming the expected path.
 ### In the rules file and by hand
 
 The same rule sets are available as calls in the rules file, for teams that keep everything in one
-place: `java()` and `kotlin()` at the top level, `hexagonal()` at the top level or inside `slice { }`.
-The building block behind `hexagonal` is available on any package:
+place: `java()` and `kotlin()` at the top level, `hexagonal()` at the top level or inside `slice { }`,
+and `hexagonalSpring()` at the top level, which puts the slice part into the file's `slice { }` block
+when there is one. The building blocks behind them are available on any package:
 
 ```kotlin
 pkg("domain") {
     isolated()          // inherit nothing, not even the root block
     allow("kotlin")     // then list exactly what this package may use
     allow("java.lang")
+}
+
+pkg("domain.model") {
+    flat()              // this package only; domain.model.money would be undeclared
 }
 ```
 

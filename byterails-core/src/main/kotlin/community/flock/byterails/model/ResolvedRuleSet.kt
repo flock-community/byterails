@@ -40,11 +40,11 @@ class ResolvedRuleSet(val ruleSet: RuleSet) {
 
     /** The most specific declaration covering [packageName], or null when the package is undeclared. */
     fun declarationFor(packageName: String): PackageDeclaration? =
-        declarations.filter { it.prefix.coversPackage(packageName) }.maxByOrNull { it.prefix.depth }
+        declarations.filter { it.coversPackage(packageName) }.maxByOrNull { it.prefix.depth }
 
     /** The declaration itself and every declaration enclosing it, outermost first. */
     fun chain(declaration: PackageDeclaration): List<PackageDeclaration> =
-        declarations.filter { it.prefix.covers(declaration.prefix) }
+        declarations.filter { it.covers(declaration.prefix) }
 
     /** The nearest declaration, self included, that carries a naming block. */
     fun namingFor(declaration: PackageDeclaration): Pair<PackageDeclaration, NamingRules>? =
@@ -70,5 +70,5 @@ class ResolvedRuleSet(val ruleSet: RuleSet) {
 
     /** True when [declaration] lies inside the subtree owned by [owner], the owner itself included. */
     fun isInside(declaration: PackageDeclaration?, owner: PackageDeclaration): Boolean =
-        declaration != null && owner.prefix.covers(declaration.prefix)
+        declaration != null && owner.covers(declaration.prefix)
 }

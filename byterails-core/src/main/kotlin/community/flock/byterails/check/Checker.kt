@@ -52,7 +52,7 @@ class Checker(ruleSet: RuleSet, private val warnings: List<ConfigProblem> = empt
 
     private fun evaluate(cls: AnalyzedClass, declaration: PackageDeclaration, rules: List<EffectiveRule>, reference: Reference): Violation? {
         val target = reference.target
-        if (declaration.prefix.covers(target)) return null
+        if (declaration.covers(target)) return null
 
         resolved.exclusiveGroups.firstOrNull { it.prefix.covers(target) && !resolved.isInside(declaration, it) }
             ?.let { group ->

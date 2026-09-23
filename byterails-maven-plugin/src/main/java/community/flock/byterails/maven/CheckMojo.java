@@ -45,7 +45,8 @@ public class CheckMojo extends AbstractMojo {
 
     /**
      * Rule sets byterails ships, by id, applied on top of the rules file or instead of it:
-     * {@code hexagonal} keeps a {@code domain} package free of external dependencies.
+     * {@code hexagonal} keeps a {@code domain} package free of external dependencies, and
+     * {@code hexagonalSpring} declares the hexagonal layout of a sliced Spring Boot service.
      */
     @Parameter(property = "byterails.defaultRules")
     private List<String> defaultRules;
