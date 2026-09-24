@@ -43,7 +43,7 @@
 
   <!--
     Built with Maven, not Gradle, because the plugin descriptor comes from maven-plugin-plugin.
-    byterails-core and byterails-rules must be in the local repository first: ./gradlew publishToMavenLocal
+    byterails-dsl, byterails-core and byterails-rules must be in the local repository first: ./gradlew publishToMavenLocal
   -->
 
   <properties>

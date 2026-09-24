@@ -25,7 +25,9 @@ class ByterailsPlugin : Plugin<Project> {
             configuration.isVisible = false
             configuration.description = "The byterails core and default rules used by the byterailsCheck task"
             configuration.defaultDependencies { dependencies ->
-                dependencies.add(project.dependencies.create("community.flock.byterails:byterails-rules:${pluginVersion()}"))
+                val version = pluginVersion()
+                dependencies.add(project.dependencies.create("community.flock.byterails:byterails-core:$version"))
+                dependencies.add(project.dependencies.create("community.flock.byterails:byterails-rules:$version"))
             }
         }
         extension.toolClasspath.from(tool)

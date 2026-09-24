@@ -243,9 +243,9 @@ byterails: 2 violations in 1,204 classes, 17 packages
 
 ## Requirements: build integration
 
-The product is three artifacts: a core library and two thin plugins. Rules are per package, not per module, so every module checks its own classes against the whole rule file and nothing needs to be aggregated.
+The product is a DSL library, a core library, the default rules and two thin plugins. Rules are per package, not per module, so every module checks its own classes against the whole rule file and nothing needs to be aggregated.
 
-1. **FR-41 Core library.** `byterails-core` holds the rule model, the script evaluation, the ASM analysis and the reporter, with no dependency on either build tool. Anyone can call it from a plain JVM test.
+1. **FR-41 Core library.** `byterails-dsl` holds the rule model, the `byterails { }` DSL, the default rule set API and the `byterails.kts` script definition, so an IDE and a rule set of a user's own need nothing of the engine. `byterails-core` holds the script evaluation, the ASM analysis and the reporter, with no dependency on either build tool. Anyone can call it from a plain JVM test.
 2. **FR-42 Gradle plugin.** Applied per project, it adds a `byterailsCheck` task wired into `check`. Inputs are the rules file and the project's main class directories; the output is the JSON report. The task is cacheable, works under the configuration cache, and runs in a worker with classloader isolation so the plugin's ASM and Kotlin scripting versions never clash with the build's.
 3. **FR-43 Maven plugin.** A `check` goal bound to the `verify` phase, run per module, with the rules file defaulting to `byterails.kts` in the multi-module root directory.
 4. **FR-44 Identical results.** The same class directories and rules file produce the same report from both plugins, proven by a test that runs both on one fixture project.
