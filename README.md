@@ -29,6 +29,30 @@ pluginManagement {
 }
 ```
 
+IntelliJ IDEA resolves `byterails.kts` files, with completion and the DSL's documentation, once the
+script definition is on the classpath of a module of the project. The plugins keep the tool off the
+project classpath, so add `byterails-rules` where the IDE looks, without shipping it:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    compileOnly("community.flock.byterails:byterails-rules:0.1.0")
+}
+```
+
+```xml
+<!-- pom.xml -->
+<dependency>
+  <groupId>community.flock.byterails</groupId>
+  <artifactId>byterails-rules</artifactId>
+  <version>0.1.0</version>
+  <scope>provided</scope>
+</dependency>
+```
+
+The definition applies to every file whose name ends in `byterails.kts`, so a module's `byterails.kts`
+and a qualified `orders.byterails.kts` are both recognised.
+
 ## The rules file
 
 ```kotlin
