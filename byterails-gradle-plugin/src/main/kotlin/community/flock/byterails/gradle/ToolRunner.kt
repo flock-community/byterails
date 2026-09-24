@@ -27,6 +27,9 @@ internal object ToolRunner {
         basePackage: String?,
         slices: List<String>,
         defaultRules: List<String>,
+        rootDir: File,
+        module: String?,
+        modules: List<ModuleSpec>,
         out: Consumer<String>,
     ): Int {
         if (classpath.isEmpty()) throw GradleException("byterails: the tool classpath is empty; set byterails.toolClasspath or check repositories")
@@ -35,12 +38,18 @@ internal object ToolRunner {
         }
         val runner = loader.loadClass(RUNNER_CLASS)
         val method = runner.getMethod(
-            "run", File::class.java, List::class.java, File::class.java, File::class.java, String::class.java, List::class.java, List::class.java, Consumer::class.java,
+            "run", File::class.java, List::class.java, File::class.java, File::class.java, String::class.java, List::class.java, List::class.java,
+            File::class.java, String::class.java, List::class.java, Consumer::class.java,
         )
+        // JDK collections only: the core's Kotlin is not the one this plugin was compiled against.
+        val moduleMaps = java.util.ArrayList(modules.map { it.toMap() })
         val previous = Thread.currentThread().contextClassLoader
         Thread.currentThread().contextClassLoader = loader
         try {
-            return method.invoke(null, rulesFile, classDirs, reportFile, cacheDir, basePackage, slices, defaultRules, out) as Int
+            return method.invoke(
+                null, rulesFile, java.util.ArrayList(classDirs), reportFile, cacheDir, basePackage, java.util.ArrayList(slices), java.util.ArrayList(defaultRules),
+                rootDir, module, moduleMaps, out,
+            ) as Int
         } catch (e: InvocationTargetException) {
             val cause = e.targetException
             throw GradleException(cause.message ?: cause.toString(), cause)

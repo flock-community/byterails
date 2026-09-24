@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.acme</groupId>
+    <artifactId>modules</artifactId>
+    <version>1.0</version>
+  </parent>
+  <artifactId>orders</artifactId>
+  <dependencies>
+    <dependency>
+      <groupId>com.acme</groupId>
+      <artifactId>common</artifactId>
+      <version>1.0</version>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>@project.groupId@</groupId>
+        <artifactId>@project.artifactId@</artifactId>
+        <configuration>
+          <module>orders</module>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

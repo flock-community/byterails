@@ -30,6 +30,7 @@ object ConsoleReporter {
         lines += "byterails: ${violation.kind.label.padEnd(12)} ${violation.className}"
         when (violation.kind) {
             ViolationKind.UNDECLARED_PACKAGE -> lines += row("package", violation.message.substringAfter("package "))
+            ViolationKind.WRONG_MODULE -> lines += row("module", violation.message.substringAfter("${violation.className} "))
             ViolationKind.NAMING -> lines += row("class", violation.className.simpleName)
             else -> {
                 lines += site(violation)

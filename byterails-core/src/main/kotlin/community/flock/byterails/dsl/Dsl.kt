@@ -1,6 +1,7 @@
 package community.flock.byterails.dsl
 
 import community.flock.byterails.model.ConfigException
+import community.flock.byterails.model.Export
 import community.flock.byterails.model.NamePattern
 import community.flock.byterails.model.NamingRules
 import community.flock.byterails.model.PackageDeclaration
@@ -31,6 +32,7 @@ class ByterailsBuilder internal constructor(private val group: String? = null) {
     private val rootRules = mutableListOf<Rule>()
     private val packages = mutableListOf<PackageDeclaration>()
     private var sliceTemplate: SliceTemplate? = null
+    private val exported = mutableListOf<Export>()
     /** Rule sets applied by name, merged at [build] once it is known whether the file has a slice block. */
     private val included = mutableListOf<RuleSet>()
 
@@ -61,6 +63,16 @@ class ByterailsBuilder internal constructor(private val group: String? = null) {
     }
 
     /**
+     * In the rules file of a module: a package of this module, relative to the module, that every other
+     * module may reference, for example `api`. Nothing else of a module can be referenced from another
+     * module. A root rules file cannot export anything.
+     */
+    fun exported(name: String) {
+        val location = SourceLocation.capture()
+        exported += Export(parsePrefix(name, location), location)
+    }
+
+    /**
      * Describes the structure every slice of the application has. Which slices exist is configured in
      * the build, as package names relative to the base package.
      */
@@ -80,7 +92,7 @@ class ByterailsBuilder internal constructor(private val group: String? = null) {
         included += ruleSet
     }
 
-    fun build(): RuleSet = included.fold(RuleSet(rootRules.toList(), packages.toList(), sliceTemplate)) { ruleSet, set ->
+    fun build(): RuleSet = included.fold(RuleSet(rootRules.toList(), packages.toList(), sliceTemplate, exported.toList())) { ruleSet, set ->
         ruleSet.including(set, sliced = ruleSet.sliceTemplate != null)
     }
 }
@@ -194,7 +206,7 @@ class PackageBuilder internal constructor(
         naming = NamingRules(patterns, location)
     }
 
-    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location, isolated, flat)
+    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location, isolated, flat, group)
 }
 
 @ByterailsDsl

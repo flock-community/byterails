@@ -148,6 +148,91 @@ that package of every slice together, so the slices' copies never clash and the 
 outside the slices. A rules file with a `slice { }` block and no configured slices fails to load, and
 so does a build that names slices for a file without one, so the two sides cannot drift apart.
 
+## Modules
+
+A build split into Gradle subprojects or Maven modules can make each of them a byterails module: a
+package under the base package that the project's classes must live in, with a `byterails.kts` of its
+own next to the build file. The root file keeps what every module shares, the module file adds what
+lies under the module, and the build names the module:
+
+```kotlin
+// build.gradle.kts, the root project
+plugins {
+    id("community.flock.byterails")
+}
+
+byterails {
+    basePackage.set("com.acme")     // inherited by every module project
+}
+```
+
+```kotlin
+// orders/build.gradle.kts
+byterails {
+    module.set("orders")            // this project's classes live in com.acme.orders
+}
+```
+
+```kotlin
+// orders/byterails.kts
+byterails {
+    exported("api")                 // every other module may use com.acme.orders.api
+    allow("org.slf4j")              // rules of the module root, inherited by the module's packages
+    allow("common")                 // a package the root file declares
+
+    pkg("api")
+    pkg("domain") {
+        allow("api")
+        exclusive("org.jooq")       // owned across the build: no other module or package may use it
+    }
+}
+```
+
+| Concept | Meaning |
+| --- | --- |
+| `module` | A build setting: the project's classes belong to `com.acme.orders`, and no other project may put classes there. A project without one is checked against the root file alone, as before. |
+| The module root | Declared implicitly and covers the whole subtree, like a slice root. The top-level `allow` and `deny` of the module file are its rules, inherited by the module's packages, with the root file's root block inherited underneath. |
+| Declarations | `pkg("domain")` in the module file is `com.acme.orders.domain`. A rule prefix follows when it points into the module's declared packages, so `allow("api")` means `com.acme.orders.api`, while `allow("common")` is left for the base package to place. The root file may declare packages inside a module; the module file may not declare one the root file declared. |
+| `exported("api")` | Every other module may reference `com.acme.orders.api`. Nothing else crosses a module boundary unless the root file allows it, and a package the root file declares gets no export. |
+| `slice { }` | The slices of a module are configured on the module's project and lie under the module: `com.acme.orders.eu`, `com.acme.orders.us`. |
+| `defaultRules` | On a module project the sets apply under the module: `hexagonal` declares `com.acme.orders.domain`, and a set that declares the base package, such as `hexagonalSpring`, describes the module root. |
+| `WRONG MODULE` | A class compiled in the orders project whose package is not under `com.acme.orders`, or a class under `com.acme.orders` compiled by any other project. Nothing else is reported for such a class, because it would be judged by the wrong rules. |
+
+Every project's check loads the root file and the rules file of every module, so an exclusive claimed
+in one module is enforced in all of them, a cycle between modules is found, and the exports are known
+everywhere. Which modules exist is read from the build: in Gradle every project that applies the plugin
+and sets `module`, in Maven every module of the reactor whose POM configures `<module>` on this plugin,
+so a `-pl` selection still sees all of them. A module without a rules file has the root rules and its
+default rules only. A `byterails.kts` next to a build file that sets no module name fails the build, so
+a module cannot silently lose its rules. On a module project, `slices` and `defaultRules` belong to the
+module; the root project's own settings go with the root file, which may be absent once there are
+modules. `basePackage { }` is not allowed in a module file, since the module root is declared implicitly.
+A violation names a module file by its path from the root, `orders/byterails.kts:7`.
+
+```
+byterails: WRONG MODULE com.acme.shared.Misplaced
+  module   is compiled in module "customers", which owns "com.acme.customers", but lies outside it
+  source   Misplaced.java
+```
+
+Maven takes the module in the plugin configuration of the module's POM:
+
+```xml
+<!-- orders/pom.xml -->
+<plugin>
+  <groupId>community.flock.byterails</groupId>
+  <artifactId>byterails-maven-plugin</artifactId>
+  <configuration>
+    <module>orders</module>
+  </configuration>
+</plugin>
+```
+
+Maven merges a parent's plugin configuration into every module, so `<basePackage>` in the parent POM
+reaches all of them, as intended, but so would `<slices>` or `<defaultRules>` meant for one module;
+keep those in the module's POM. The goal reads the other modules from the reactor, so run it from the
+multi-module root.
+
 ## Default rules
 
 byterails ships rule sets you apply by name. A default rule set expands into ordinary package
@@ -382,9 +467,9 @@ plugins {
 ```
 
 The plugin adds a `byterailsCheck` task, wired into `check`, that reads the main classes of the
-project against `byterails.kts` in the root project. Every module of a multi-module build checks its
-own classes against the same file. Violations fail the task and are written to
-`build/reports/byterails/violations.json`.
+project against `byterails.kts` in the root project. Every project of a multi-module build checks its
+own classes against the same file, plus the rules files of the [modules](#modules) when the build has
+them. Violations fail the task and are written to `build/reports/byterails/violations.json`.
 
 ```
 byterails: DENIED       com.acme.domain.Order
@@ -435,8 +520,11 @@ The `check` goal runs in the `verify` phase and reads the module's compiled clas
 `byterails.kts` in the multi-module root directory. Each module checks its own classes, violations
 fail the build, and the JSON report lands in `target/byterails/violations.json`. Properties:
 `-Dbyterails.reportOnly=true`, `-Dbyterails.skip=true`, `-Dbyterails.rulesFile=...`,
-`-Dbyterails.basePackage=...`, `-Dbyterails.slices=...` and `-Dbyterails.defaultRules=...`. The same rules file gives the same result from Gradle and Maven,
-because both call the same core.
+`-Dbyterails.basePackage=...`, `-Dbyterails.slices=...`, `-Dbyterails.defaultRules=...`,
+`-Dbyterails.module=...` and `-Dbyterails.moduleRulesFile=...`. A Maven module that configures
+`<module>` is a byterails [module](#modules); the goal finds the other modules' rules files through
+the reactor. The same rules file gives the same result from Gradle and Maven, because both call the
+same core.
 
 ## Command line and library
 
@@ -506,5 +594,6 @@ against the Central Portal's staging API; the Maven side uses the Central publis
 
 ## Status
 
-0.1: core library, `byterails.kts` loader, Gradle plugin, Maven plugin, CLI. Planned next:
+0.1: core library, `byterails.kts` loader, Gradle plugin, Maven plugin, CLI, slices, default rules,
+modules. Planned next:
 kind-aware and annotation-conditioned naming, expiring allows, SARIF and JUnit XML reports.
