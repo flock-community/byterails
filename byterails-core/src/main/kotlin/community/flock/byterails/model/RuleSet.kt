@@ -87,6 +87,8 @@ data class PackageDeclaration(
     val location: SourceLocation?,
     val isolated: Boolean = false,
     val flat: Boolean = false,
+    /** The group of the rule set this declaration came from, `default:<id>`, or null for one the user wrote. */
+    val group: String? = null,
 ) {
     val name: String get() = prefix.name
 
@@ -101,17 +103,29 @@ data class PackageDeclaration(
     fun touches(candidate: Prefix): Boolean = candidate.covers(prefix) || covers(candidate)
 }
 
+/** A package a module makes available to every other module, `exported("api")` in its rules file. */
+data class Export(val prefix: Prefix, val location: SourceLocation?) {
+    val text: String get() = "exported(\"${prefix.name}\")"
+}
+
 /**
  * The whole configuration: root rules, inherited by everything, plus the declared packages.
  *
  * [sliceTemplate] is the structure of one slice as the rules file describes it. Which slices exist is
  * configured in the build, and [withSlices] turns the template into ordinary declarations; a rule set
  * that still carries a template cannot be checked.
+ *
+ * [exported] is what the rules file of a module makes available to the other modules; [withModules]
+ * turns it into allows, and a root rules file may not export anything. [modules] are the modules of
+ * the build once [withModules] has run, and [module] is the one whose classes are being checked.
  */
 data class RuleSet(
     val rootRules: List<Rule>,
     val packages: List<PackageDeclaration>,
     val sliceTemplate: SliceTemplate? = null,
+    val exported: List<Export> = emptyList(),
+    val modules: List<ModuleRoot> = emptyList(),
+    val module: String? = null,
 )
 
 /**

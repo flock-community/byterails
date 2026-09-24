@@ -27,5 +27,6 @@ fun RuleSet.withBasePackage(basePackage: String?): RuleSet {
     return copy(
         rootRules = rootRules.map(::resolve),
         packages = declared.map { declaration -> declaration.copy(rules = declaration.rules.map(::resolve)) },
+        modules = modules.map { it.copy(prefix = Prefix.concat(base, it.prefix)) },
     )
 }

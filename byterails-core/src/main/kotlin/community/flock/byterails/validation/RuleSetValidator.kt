@@ -23,6 +23,9 @@ object RuleSetValidator {
         ruleSet.sliceTemplate?.let {
             problems += error("the rules file has a slice { } block, but no slices are configured; name them in the build", it.location)
         }
+        ruleSet.exported.forEach {
+            problems += error("${it.text} is only meaningful in the rules file of a module; the root rules file exports nothing", it.location)
+        }
         duplicateDeclarations(resolved, problems)
         exclusiveAtRoot(ruleSet, problems)
         exclusiveClashes(resolved, problems)
@@ -34,9 +37,21 @@ object RuleSetValidator {
     }
 
     private fun duplicateDeclarations(resolved: ResolvedRuleSet, problems: MutableList<ConfigProblem>) {
+        val moduleRoots = resolved.ruleSet.modules.associateBy { it.prefix }
         resolved.declarations.groupBy { it.prefix }.values
             .filter { it.size > 1 }
             .forEach { duplicates ->
+                val module = moduleRoots[duplicates.first().prefix]
+                if (module != null) {
+                    // The implicit module root carries no location; the declaration the user wrote does.
+                    val written = duplicates.firstOrNull { it.location != null } ?: duplicates.last()
+                    problems += error(
+                        "package \"${written.name}\" is the root of module \"${module.name}\", which is declared implicitly; " +
+                            "declare its sub-packages in the module's rules file instead",
+                        written.location,
+                    )
+                    return@forEach
+                }
                 val first = duplicates.first()
                 duplicates.drop(1).forEach { again ->
                     problems += error(
@@ -151,8 +166,10 @@ object RuleSetValidator {
         val index = declarations.withIndex().associate { (i, d) -> d to i }
         val edges = declarations.map { from ->
             // An allow of the root prefix grants everything and describes no dependency, so it draws no edge.
+            // Neither does an allow pointing into the package's own subtree, which it may reference anyway;
+            // a module or slice root allows one of its packages so that its other packages may use it.
             val targets = resolved.effectiveRules(from)
-                .filter { it.rule.kind != RuleKind.DENY && !it.rule.isExported && !it.rule.prefix.isRoot }
+                .filter { it.rule.kind != RuleKind.DENY && !it.rule.isExported && !it.rule.prefix.isRoot && !from.covers(it.rule.prefix) }
                 .map { it.rule.prefix }
             declarations.filter { to ->
                 to !== from && targets.any { it.covers(to.prefix) || to.covers(it) }

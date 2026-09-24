@@ -12,6 +12,7 @@ object JsonReporter {
         append("  \"schema\": 1,\n")
         append("  \"classes\": ").append(result.classCount).append(",\n")
         append("  \"packages\": ").append(result.packageCount).append(",\n")
+        result.module?.let { append("  \"module\": ").append(quote(it)).append(",\n") }
         append("  \"warnings\": [")
         result.warnings.forEachIndexed { i, warning ->
             if (i > 0) append(",")

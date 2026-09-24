@@ -21,9 +21,11 @@ import community.flock.byterails.model.RuleSet
  * declaration, T exclusive to another package, a deny in P's effective rules, an allow in P's
  * effective rules, otherwise not allowed.
  */
-class Checker(ruleSet: RuleSet, private val warnings: List<ConfigProblem> = emptyList()) {
+class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigProblem> = emptyList()) {
 
     private val resolved = ResolvedRuleSet(ruleSet)
+
+    private val currentModule = ruleSet.modules.firstOrNull { it.name == ruleSet.module }
 
     fun check(classes: Sequence<AnalyzedClass>): CheckResult {
         val violations = mutableListOf<Violation>()
@@ -34,10 +36,11 @@ class Checker(ruleSet: RuleSet, private val warnings: List<ConfigProblem> = empt
             packages += cls.name.packageName
             violations += checkClass(cls)
         }
-        return CheckResult(violations.sortedWith(ORDER), classCount, packages.size, warnings)
+        return CheckResult(violations.sortedWith(ORDER), classCount, packages.size, warnings, ruleSet.module)
     }
 
     fun checkClass(cls: AnalyzedClass): List<Violation> {
+        wrongModule(cls)?.let { return listOf(it) }
         val declaration = resolved.declarationFor(cls.name.packageName)
             ?: return listOf(undeclared(cls))
         val found = LinkedHashMap<Any, Violation>()
@@ -105,6 +108,24 @@ class Checker(ruleSet: RuleSet, private val warnings: List<ConfigProblem> = empt
     private fun isNamingCandidate(cls: AnalyzedClass): Boolean =
         !cls.name.isNested && !cls.isSynthetic && !cls.isGenerated &&
             cls.name.simpleName != "package-info" && cls.name.simpleName != "module-info"
+
+    /**
+     * A class is compiled in the wrong place when it lies outside the module being checked, or inside a
+     * module while another module or no module is being checked. Its rules are the wrong ones too, so
+     * nothing else is reported for it.
+     */
+    private fun wrongModule(cls: AnalyzedClass): Violation? {
+        if (ruleSet.modules.isEmpty()) return null
+        val owner = ruleSet.modules.firstOrNull { it.prefix.covers(cls.name) }
+        val current = currentModule
+        if (owner == current) return null
+        val detail = when {
+            owner == null -> "is compiled in module \"${current!!.name}\", which owns \"${current.prefix}\", but lies outside it"
+            current == null -> "belongs to module \"${owner.name}\", which owns \"${owner.prefix}\", but is compiled outside the modules"
+            else -> "belongs to module \"${owner.name}\", which owns \"${owner.prefix}\", but is compiled in module \"${current.name}\""
+        }
+        return Violation(ViolationKind.WRONG_MODULE, cls.name, null, null, null, null, emptyList(), cls.sourceFile, "${cls.name} $detail")
+    }
 
     private fun undeclared(cls: AnalyzedClass): Violation {
         val nearest = resolved.declarations

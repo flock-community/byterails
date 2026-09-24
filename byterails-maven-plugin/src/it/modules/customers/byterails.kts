@@ -1,0 +1,3 @@
+byterails {
+    pkg("domain")
+}

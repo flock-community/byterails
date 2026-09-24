@@ -7,6 +7,8 @@ import community.flock.byterails.model.SourceLocation
 
 enum class ViolationKind(val label: String) {
     UNDECLARED_PACKAGE("UNDECLARED"),
+    /** A class compiled in a module whose package lies outside it, or a class of a module compiled elsewhere. */
+    WRONG_MODULE("WRONG MODULE"),
     NOT_ALLOWED("NOT ALLOWED"),
     DENIED("DENIED"),
     EXCLUSIVE("EXCLUSIVE"),
@@ -36,6 +38,8 @@ data class CheckResult(
     val classCount: Int,
     val packageCount: Int,
     val warnings: List<ConfigProblem>,
+    /** The module whose classes were checked, when the build has modules. */
+    val module: String? = null,
 ) {
     val isClean: Boolean get() = violations.isEmpty()
 }
