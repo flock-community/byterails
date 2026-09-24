@@ -103,11 +103,11 @@ class ByterailsPluginFunctionalTest {
         val dir = project(rules, domain, infra, offending)
         val result: BuildResult = runner(dir).buildAndFail()
         assertEquals(TaskOutcome.FAILED, result.task(":byterailsCheck")?.outcome)
-        assertTrue(result.output.contains("byterails: EXCLUSIVE    com.acme.domain.OrderList"), result.output)
-        assertTrue(result.output.contains("field    orders : java.util.List"), result.output)
+        assertTrue(result.output.contains("byterails: EXCLUSIVE    com.acme.domain -> java.util"), result.output)
+        assertTrue(result.output.contains("OrderList.orders  List  OrderList.java"), result.output)
         assertTrue(result.output.contains("rule     exclusive(\"java.util\")"), result.output)
         assertTrue(result.output.contains("byterails.kts:6  in \"com.acme.infra\""), result.output)
-        assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 2 packages"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 1 group, 3 classes, 2 packages"), result.output)
         assertTrue(result.output.contains("byterails found 1 violation"), result.output)
     }
 
@@ -116,7 +116,7 @@ class ByterailsPluginFunctionalTest {
         val dir = project(rules, domain, infra, offending)
         val result = runner(dir, "-Pbyterails.reportOnly=true").build()
         assertEquals(TaskOutcome.SUCCESS, result.task(":byterailsCheck")?.outcome)
-        assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 2 packages"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 1 group, 3 classes, 2 packages"), result.output)
         val report = File(dir, "build/reports/byterails/violations.json").readText()
         assertTrue(report.contains("\"kind\": \"EXCLUSIVE\""), report)
     }
@@ -138,8 +138,8 @@ class ByterailsPluginFunctionalTest {
             extra = "basePackage.set(\"com.acme\")",
         )
         val result = runner(dir).buildAndFail()
-        assertTrue(result.output.contains("byterails: EXCLUSIVE    com.acme.domain.OrderList"), result.output)
-        assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 2 packages"), result.output)
+        assertTrue(result.output.contains("byterails: EXCLUSIVE    com.acme.domain -> java.util"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 1 group, 3 classes, 2 packages"), result.output)
         assertTrue(!result.output.contains("UNDECLARED"), result.output)
     }
 
@@ -174,11 +174,11 @@ class ByterailsPluginFunctionalTest {
             extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\", \"billing\"))",
         )
         val result = runner(dir).buildAndFail()
-        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.billing.domain.Invoice"), result.output)
-        assertTrue(result.output.contains("field    notAllowed : com.acme.sales.domain.Sale"), result.output)
+        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.billing.domain -> com.acme.sales.domain"), result.output)
+        assertTrue(result.output.contains("Invoice.notAllowed  Sale  Invoice.java"), result.output)
         assertTrue(!result.output.contains("allowedThroughExport"), "the exported api is allowed: " + result.output)
         assertTrue(result.output.contains("allows   com.acme.billing.api, com.acme.sales.api, java.lang"), result.output)
-        assertTrue(result.output.contains("byterails: 1 violation in 3 classes, 3 packages"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 1 group, 3 classes, 3 packages"), result.output)
     }
 
     @Test
@@ -196,11 +196,11 @@ class ByterailsPluginFunctionalTest {
             extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\"))\n    defaultRules.set(listOf(\"java\", \"hexagonal\"))",
         )
         val result = runner(dir).buildAndFail()
-        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.sales.domain.Leak"), result.output)
-        assertTrue(result.output.contains("field    endpoint : java.net.URI"), result.output)
+        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.sales.domain -> java.net"), result.output)
+        assertTrue(result.output.contains("Leak.endpoint  URI  Leak.java"), result.output)
         assertTrue(result.output.contains("allows   [hexagonal]"), result.output)
         assertTrue(result.output.contains("hint     [hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text"), result.output)
-        assertTrue(result.output.contains("byterails: 1 violation in 2 classes, 1 packages"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 1 group, 2 classes, 1 packages"), result.output)
 
         val without = project(null, "com/acme/sales/domain/Sale.java" to "package com.acme.sales.domain; public class Sale {}")
         val missing = runner(without).buildAndFail()
@@ -313,19 +313,21 @@ class ByterailsPluginFunctionalTest {
         assertEquals(TaskOutcome.SUCCESS, result.task(":byterailsCheck")?.outcome, "the root project has no classes and validates the whole configuration: " + output)
 
         assertEquals(TaskOutcome.FAILED, result.task(":customers:byterailsCheck")?.outcome, output)
-        assertTrue(output.contains("byterails: NOT ALLOWED  com.acme.customers.domain.Customer"), output)
-        assertTrue(output.contains("field    order : com.acme.orders.domain.Order"), output)
+        assertTrue(output.contains("byterails: NOT ALLOWED  com.acme.customers.domain -> com.acme.orders.domain"), output)
+        assertTrue(output.contains("Customer.order  Order  Customer.java"), output)
         assertTrue(output.contains("allows   com.acme.orders.api, java.lang"), output)
-        assertTrue(!output.contains("field    api"), "the exported api package is allowed: " + output)
-        assertTrue(output.contains("byterails: EXCLUSIVE    com.acme.customers.domain.Customer"), output)
-        assertTrue(output.contains("field    names : java.util.List"), output)
+        assertTrue(!output.contains("Customer.api"), "the exported api package is allowed: " + output)
+        assertTrue(output.contains("byterails: EXCLUSIVE    com.acme.customers.domain -> java.util"), output)
+        assertTrue(output.contains("Customer.names  List  Customer.java"), output)
         assertTrue(output.contains("rule     exclusive(\"java.util\")"), output)
         assertTrue(output.contains("orders/byterails.kts:7  in \"com.acme.orders.domain\""), output)
-        assertTrue(output.contains("byterails: WRONG MODULE com.acme.shared.Misplaced"), output)
+        assertTrue(output.contains("byterails: WRONG MODULE com.acme.shared"), output)
+        assertTrue(output.contains("  Misplaced  Misplaced.java"), output)
         assertTrue(output.contains("module   is compiled in module \"customers\", which owns \"com.acme.customers\", but lies outside it"), output)
 
         assertEquals(TaskOutcome.FAILED, result.task(":common:byterailsCheck")?.outcome, output)
-        assertTrue(output.contains("byterails: WRONG MODULE com.acme.orders.Stray"), output)
+        assertTrue(output.contains("byterails: WRONG MODULE com.acme.orders"), output)
+        assertTrue(output.contains("  Stray  Stray.java"), output)
         assertTrue(output.contains("module   belongs to module \"orders\", which owns \"com.acme.orders\", but is compiled outside the modules"), output)
 
         assertEquals(TaskOutcome.FAILED, result.task(":billing:byterailsCheck")?.outcome, output)

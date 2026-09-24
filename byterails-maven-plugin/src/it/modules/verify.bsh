@@ -3,14 +3,16 @@ import java.nio.file.*;
 
 String log = new String(Files.readAllBytes(new File(basedir, "build.log").toPath()), "UTF-8");
 String[] expected = {
-    "byterails: WRONG MODULE com.acme.orders.Stray",
+    "byterails: WRONG MODULE com.acme.orders",
+    "  Stray  Stray.java",
     "module   belongs to module \"orders\", which owns \"com.acme.orders\", but is compiled outside the modules",
-    "byterails: NOT ALLOWED  com.acme.customers.domain.Customer",
-    "field    order : com.acme.orders.domain.Order",
+    "byterails: NOT ALLOWED  com.acme.customers.domain -> com.acme.orders.domain",
+    "Customer.order  Order  Customer.java",
     "allows   com.acme.orders.api, java.lang",
-    "byterails: EXCLUSIVE    com.acme.customers.domain.Customer",
+    "byterails: EXCLUSIVE    com.acme.customers.domain -> java.util",
     "orders/byterails.kts:7  in \"com.acme.orders.domain\"",
-    "byterails: WRONG MODULE com.acme.shared.Misplaced",
+    "byterails: WRONG MODULE com.acme.shared",
+    "  Misplaced  Misplaced.java",
     "module   is compiled in module \"customers\", which owns \"com.acme.customers\", but lies outside it",
     "byterails: 0 violations in 2 classes, 2 packages",
     "byterails: 0 violations in 1 classes, 1 packages"
@@ -20,7 +22,7 @@ for (String line : expected) {
         throw new RuntimeException("build.log is missing: " + line);
     }
 }
-if (log.indexOf("field    api") >= 0) {
+if (log.indexOf("Customer.api") >= 0) {
     throw new RuntimeException("the exported api package must be allowed");
 }
 if (!new File(basedir, "customers/target/byterails/violations.json").isFile()) {

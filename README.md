@@ -239,9 +239,9 @@ modules. `basePackage { }` is not allowed in a module file, since the module roo
 A violation names a module file by its path from the root, `orders/byterails.kts:7`.
 
 ```
-byterails: WRONG MODULE com.acme.shared.Misplaced
+byterails: WRONG MODULE com.acme.shared
   module   is compiled in module "customers", which owns "com.acme.customers", but lies outside it
-  source   Misplaced.java
+  Misplaced  Misplaced.java
 ```
 
 Maven takes the module in the plugin configuration of the module's POM:
@@ -315,11 +315,10 @@ A violation reads like any other, except that allows coming from a rule set show
 hint that spells the set out. Here `com.acme.sales.domain.Leak` holds a `java.net.URI`:
 
 ```
-byterails: NOT ALLOWED  com.acme.sales.domain.Leak
-  field    endpoint : java.net.URI
+byterails: NOT ALLOWED  com.acme.sales.domain -> java.net
   allows   [hexagonal]
-  source   Leak.java
   hint     [hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text
+  Leak.endpoint  URI  Leak.java
 ```
 
 ### The hexagonalSpring layout
@@ -500,19 +499,23 @@ project against `byterails.kts` in the root project. Every project of a multi-mo
 own classes against the same file, plus the rules files of the [modules](#modules) when the build has
 them. Violations fail the task and are written to `build/reports/byterails/violations.json`.
 
+The console groups violations by root cause: the package they come from, the kind, and the package
+they point at, so every group is one line to change in the rules file or one piece of code to move.
+The rule, the allows and the hint are printed once per group, then one line per reference with the
+class and member, the referenced class, and the source location. A group shows at most ten members;
+the JSON report holds all of them.
+
 ```
-byterails: DENIED       com.acme.domain.Order
-  field    entityManager : jakarta.persistence.EntityManager
-  rule     deny("jakarta.persistence")              byterails.kts:14  in "com.acme.domain"
-  source   Order.kt
-
-byterails: NOT ALLOWED  com.acme.domain.OrderService
-  method   place(Order) : void
-  ref      org.springframework.web.client.RestTemplate
+byterails: NOT ALLOWED  com.acme.domain -> org.springframework.web.client
   allows   com.acme.domain, java.lang, java.time, java.util, kotlin
-  source   OrderService.kt:42
+  OrderService.place(Order) : void  RestTemplate  OrderService.kt:42
+  Shipping.client                   RestClient    Shipping.kt
 
-byterails: 2 violations in 1,204 classes, 17 packages
+byterails: DENIED       com.acme.domain -> jakarta.persistence
+  rule     deny("jakarta.persistence")              byterails.kts:14  in "com.acme.domain"
+  Order.entityManager  EntityManager  Order.kt
+
+byterails: 3 violations in 2 groups, 1,204 classes, 17 packages
 ```
 
 A project whose packages all live under one root can set `byterails { basePackage.set("com.acme") }`

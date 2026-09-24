@@ -217,7 +217,7 @@ The violation message is the product for most people who meet byterails, so it i
 
 1. **FR-33 Violation message.** Every violation prints as one block with the kind, the class, the member when there is one, the referenced type, the rule that decided with its line in the config, and the source file from the class file's source attribute. A line number is added only when the reference sits in a method body and the line number table has one.
 2. **FR-34 Not-allowed explains itself.** A not-allowed violation lists the effective allows of the package, so the developer sees what the package may use without opening the config.
-3. **FR-35 Ordering.** Violations are grouped by package, then class, then member, in stable sorted order, followed by one summary line with counts per kind.
+3. **FR-35 Grouping.** The console groups violations by root cause: the source package, the kind and the target package, plus the deciding rule where there is one, so a group is one change to the rules file or one move. The shared facts print once per group, then one line per member, capped at ten with the rest left to the report file. Groups and members are in stable sorted order, followed by one summary line with the violation and group counts.
 4. **FR-36 Report-only mode.** A plugin setting or a command-line property switches every violation to a warning and lets the task succeed. It lives in the build configuration, not in the rules file, so the rules file stays a pure description of the architecture.
 5. **FR-37 Report file.** Every run writes a JSON report with the same content as the console output, under the build tool's report directory, with a stable schema. SARIF and JUnit XML are generated from it in 0.3.
 6. **FR-38 Clean run.** Zero violations print one line with the number of classes and packages checked.
@@ -227,18 +227,16 @@ The violation message is the product for most people who meet byterails, so it i
 Two messages as a developer would see them:
 
 ```
-byterails: DENIED       com.acme.domain.Order
-  field    entityManager : jakarta.persistence.EntityManager
-  rule     deny("jakarta.persistence")            byterails.kts:14
-  source   Order.kt
+byterails: NOT ALLOWED  com.acme.domain -> org.springframework.web.client
+  allows   com.acme.domain, java.lang, java.time, java.util, kotlin
+  OrderService.place(Order) : void  RestTemplate  OrderService.kt:42
+  Shipping.client                   RestClient    Shipping.kt
 
-byterails: NOT ALLOWED  com.acme.domain.OrderService
-  method   place(Order) : void
-  ref      org.springframework.web.client.RestTemplate
-  allows   kotlin, java.lang, java.util, java.time, com.acme.domain
-  source   OrderService.kt:42
+byterails: DENIED       com.acme.domain -> jakarta.persistence
+  rule     deny("jakarta.persistence")              byterails.kts:14  in "com.acme.domain"
+  Order.entityManager  EntityManager  Order.kt
 
-byterails: 2 violations in 1,204 classes, 17 packages
+byterails: 3 violations in 2 groups, 1,204 classes, 17 packages
 ```
 
 ## Requirements: build integration
