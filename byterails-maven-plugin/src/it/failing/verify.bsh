@@ -3,11 +3,11 @@ import java.nio.file.*;
 
 String log = new String(Files.readAllBytes(new File(basedir, "build.log").toPath()), "UTF-8");
 String[] expected = {
-    "byterails: EXCLUSIVE    com.acme.domain.OrderList",
-    "field    orders : java.util.List",
+    "byterails: EXCLUSIVE    com.acme.domain -> java.util",
+    "OrderList.orders  List  OrderList.java",
     "rule     exclusive(\"java.util\")",
     "byterails.kts:6  in \"com.acme.infra\"",
-    "byterails: 1 violation in 3 classes, 2 packages",
+    "byterails: 1 violation in 1 group, 3 classes, 2 packages",
     "byterails found 1 violation"
 };
 for (String line : expected) {

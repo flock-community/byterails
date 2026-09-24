@@ -2,6 +2,7 @@ package community.flock.byterails
 
 import community.flock.byterails.analysis.ClassDirScanner
 import community.flock.byterails.check.Checker
+import community.flock.byterails.check.ViolationGroup
 import community.flock.byterails.check.ViolationKind
 import community.flock.byterails.dsl.ByterailsBuilder
 import community.flock.byterails.dsl.byterails
@@ -231,8 +232,8 @@ class ModulesTest {
         assertEquals("fixtures.slices.customers.domain.Customer belongs to module \"slices.customers\", which owns \"fixtures.slices.customers\", but is compiled in module \"slices.orders\"", other.message)
         assertTrue(result.violations.none { it.className.name.startsWith("fixtures.slices.orders") && it.kind == ViolationKind.WRONG_MODULE })
         assertEquals(
-            listOf("byterails: WRONG MODULE fixtures.app.domain.Order", "  module   is compiled in module \"slices.orders\", which owns \"fixtures.slices.orders\", but lies outside it", "  source   Order.kt"),
-            ConsoleReporter.render(app),
+            listOf("byterails: WRONG MODULE fixtures.app.domain", "  module   is compiled in module \"slices.orders\", which owns \"fixtures.slices.orders\", but lies outside it", "  Order  Order.kt"),
+            ConsoleReporter.render(ViolationGroup.of(listOf(app)).single()),
         )
     }
 
