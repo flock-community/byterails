@@ -72,17 +72,24 @@ subprojects {
 
 // The modules that make up the tool are checked against the repository's own byterails.kts on every
 // build. The core alone loads the file without the default rules on the classpath, which is how a
-// library user without byterails-rules sees it; the rules module is checked with both.
-val selfChecked = setOf("byterails-core", "byterails-rules")
+// library user without byterails-rules sees it; the rules module is checked with both. The DSL and
+// the rules modules do not depend on the core, so the check adds it to their classpath.
+val selfChecked = setOf("byterails-dsl", "byterails-core", "byterails-rules")
 
 subprojects {
     if (name !in selfChecked) return@subprojects
     plugins.withId("org.jetbrains.kotlin.jvm") {
         val main = extensions.getByType<SourceSetContainer>().named("main")
+        val tool = configurations.create("byterailsSelfCheckTool") {
+            isCanBeConsumed = false
+            isVisible = false
+            description = "The byterails core that runs the self-check"
+        }
+        if (name != "byterails-core") dependencies.add(tool.name, dependencies.project(":byterails-core"))
         val selfCheck = tasks.register<JavaExec>("byterailsSelfCheck") {
             description = "Checks ${project.name} against the repository's own byterails.kts"
             group = "verification"
-            classpath = main.get().runtimeClasspath
+            classpath = main.get().runtimeClasspath + tool
             mainClass.set("community.flock.byterails.cli.Main")
             val rules = rootProject.layout.projectDirectory.file("byterails.kts").asFile
             val classes: FileCollection = main.get().output.classesDirs

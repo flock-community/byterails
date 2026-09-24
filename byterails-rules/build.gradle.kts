@@ -28,8 +28,10 @@ val fixtureClasses: Configuration by configurations.creating {
 }
 
 dependencies {
-    api(project(":byterails-core"))
+    api(project(":byterails-dsl"))
 
+    // The tests check the sets against the core's fixture classes; a user of the rule sets needs the core only to run a check.
+    testImplementation(project(":byterails-core"))
     fixtureClasses(project(mapOf("path" to ":byterails-core", "configuration" to "fixtureClasses")))
 
     testImplementation(kotlin("test"))

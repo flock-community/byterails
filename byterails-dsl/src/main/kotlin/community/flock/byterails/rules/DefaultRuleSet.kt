@@ -13,7 +13,8 @@ import java.util.ServiceLoader
  *
  * The rule sets byterails ships live in the `byterails-rules` module, one file each in this same
  * package, next to the keyword that applies the set from a rules file. They reach the core through
- * a [DefaultRuleSetProvider] registered as a service, so the core knows a set by its [id] only.
+ * a [DefaultRuleSetProvider] registered as a service, so the core knows a set by its [id] only, and
+ * a rule set of a user's own needs this module alone.
  *
  * A rule set is applied by [id] from the build, or by its keyword from a rules file, and expands
  * into ordinary rules and declarations, so inheritance, matching and reporting apply to it unchanged.

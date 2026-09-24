@@ -1,4 +1,4 @@
-# Publishes byterails-core, byterails-rules, the Gradle plugin and the Maven plugin to Maven Central.
+# Publishes byterails-dsl, byterails-core, byterails-rules, the Gradle plugin and the Maven plugin to Maven Central.
 #
 #   push to main        -> the SNAPSHOT version from gradle.properties, to the Central snapshot repository
 #   GitHub release      -> the release tag (a leading "v" is dropped), released on Maven Central

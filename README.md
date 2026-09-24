@@ -13,11 +13,14 @@ same module, and the references it checks are the ones the compiler actually emi
 ## Installing
 
 The artifacts are published to Maven Central under the group `community.flock.byterails`:
-`byterails-core`, `byterails-rules` with the rule sets described under [Default rules](#default-rules),
-`byterails-gradle-plugin` with the plugin id `community.flock.byterails`, and `byterails-maven-plugin`.
-Both plugins put the core and the default rules on the tool classpath; a project that uses the
-library directly depends on `byterails-rules`, which brings the core with it. The Gradle plugin is resolved from Maven Central rather than the plugin
-portal, so add it to the plugin repositories once:
+`byterails-dsl` with the rule model, the `byterails { }` DSL and the `byterails.kts` script definition,
+`byterails-core` with the bytecode analysis, the checker and the script loader, `byterails-rules` with
+the rule sets described under [Default rules](#default-rules), `byterails-gradle-plugin` with the
+plugin id `community.flock.byterails`, and `byterails-maven-plugin`. Both plugins put the core and the
+default rules on the tool classpath. A project that uses the library directly depends on
+`byterails-core`, which brings the DSL with it, and on `byterails-rules` when it applies a default rule
+set; a rule set of its own needs `byterails-dsl` only. The Gradle plugin is resolved from Maven Central
+rather than the plugin portal, so add it to the plugin repositories once:
 
 ```kotlin
 // settings.gradle.kts
@@ -30,8 +33,10 @@ pluginManagement {
 ```
 
 IntelliJ IDEA resolves `byterails.kts` files, with completion and the DSL's documentation, once the
-script definition is on the classpath of a module of the project. The plugins keep the tool off the
-project classpath, so add `byterails-rules` where the IDE looks, without shipping it:
+script definition is on the classpath of a module of the project. The definition lives in
+`byterails-dsl`, which carries no bytecode analysis and no script host. The plugins keep the tool off
+the project classpath, so add `byterails-rules`, which brings the DSL with it, where the IDE looks,
+without shipping it:
 
 ```kotlin
 // build.gradle.kts
@@ -555,7 +560,7 @@ same core.
 The core ships a small CLI, exit status 1 on violations and 2 on a broken rules file:
 
 ```
-java -cp <byterails-rules, byterails-core and their dependencies> community.flock.byterails.cli.Main \
+java -cp <byterails-core, byterails-rules and their dependencies> community.flock.byterails.cli.Main \
     --rules byterails.kts --classes build/classes/kotlin/main:build/classes/java/main \
     --report build/byterails.json --report-only
 ```
@@ -601,14 +606,14 @@ questions are in [docs/PRD.md](docs/PRD.md).
 
 The Gradle build compiles a corpus of Kotlin and Java fixtures and asserts where every kind of
 reference is found, runs the Gradle plugin against real builds with TestKit, and checks
-`byterails-core` and `byterails-rules` against this repository's own [`byterails.kts`](byterails.kts). The Maven plugin is
+`byterails-dsl`, `byterails-core` and `byterails-rules` against this repository's own [`byterails.kts`](byterails.kts). The Maven plugin is
 built by Maven, because its descriptor comes from Maven's plugin tooling, and runs its integration
 tests against sample projects with the invoker plugin.
 
 ## Releasing
 
-Publishing a GitHub release runs the deploy workflow, which builds, tests and publishes the core, the
-Gradle plugin and the Maven plugin to Maven Central under the release tag, with a leading `v`
+Publishing a GitHub release runs the deploy workflow, which builds, tests and publishes the DSL, the
+core, the rules, the Gradle plugin and the Maven plugin to Maven Central under the release tag, with a leading `v`
 dropped. Every push to `main` publishes the `-SNAPSHOT` version from `gradle.properties` to the
 Central snapshot repository, and the workflow can be dispatched by hand with a version. It needs four
 repository secrets: `SONATYPE_USERNAME` and `SONATYPE_PASSWORD`, a Central Portal user token, and

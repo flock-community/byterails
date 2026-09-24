@@ -16,6 +16,7 @@ import community.flock.byterails.model.including
 import community.flock.byterails.model.withBasePackage
 import community.flock.byterails.model.withModules
 import community.flock.byterails.report.ConsoleReporter
+import community.flock.byterails.rules.DefaultRuleSet
 import community.flock.byterails.validation.RuleSetValidator
 import java.io.File
 import java.nio.file.Files
@@ -131,15 +132,17 @@ class ModulesTest {
     @Test
     fun `a rule set applied to a module lands under the module root, and one that declares the base describes the root`() {
         // Stands in for hexagonalSpring: a flat base package, a config package and a slice-part domain.
-        val layout = ByterailsBuilder("default:layout").apply {
-            allow("org.jetbrains.annotations")
-            basePackage {
-                flat()
-                allowAnything()
-                naming { endsWith("Application") }
+        val layout = object : DefaultRuleSet("layout", "a layout", "is the layout") {
+            override fun ByterailsBuilder.rules() {
+                allow("org.jetbrains.annotations")
+                basePackage {
+                    flat()
+                    allowAnything()
+                    naming { endsWith("Application") }
+                }
+                pkg("config") { allow("org.springframework") }
+                slice { pkg("domain") { isolated() } }
             }
-            pkg("config") { allow("org.springframework") }
-            slice { pkg("domain") { isolated() } }
         }.build()
         val orders = ModuleRules("orders", byterails { allow("org.slf4j") }.including(layout, sliced = false))
         val withLayout = root.withModules(listOf(orders), "orders").withBasePackage("com.acme")

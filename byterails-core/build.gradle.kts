@@ -6,7 +6,7 @@ plugins {
     `maven-publish`
 }
 
-description = "byterails core: rule model, byterails.kts loader, bytecode analysis and reporting"
+description = "byterails core: byterails.kts loader, bytecode analysis, checking and reporting"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -34,9 +34,8 @@ fixtures.output.classesDirs.forEach { dir ->
 }
 
 dependencies {
+    api(project(":byterails-dsl"))
     implementation(libs.asm)
-    implementation(libs.kotlin.scripting.common)
-    implementation(libs.kotlin.scripting.jvm)
     implementation(libs.kotlin.scripting.jvm.host)
 
     "fixturesImplementation"(kotlin("stdlib"))

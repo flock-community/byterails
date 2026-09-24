@@ -36,6 +36,7 @@ configurations["functionalTestImplementation"].extendsFrom(configurations.testIm
 configurations["functionalTestRuntimeOnly"].extendsFrom(configurations.testRuntimeOnly.get())
 
 dependencies {
+    byterailsTool(project(":byterails-core"))
     byterailsTool(project(":byterails-rules"))
 
     testImplementation(kotlin("test"))

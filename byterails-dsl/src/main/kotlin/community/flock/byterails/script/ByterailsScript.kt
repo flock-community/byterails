@@ -31,7 +31,8 @@ abstract class ByterailsScript {
         built = community.flock.byterails.dsl.byterails(block)
     }
 
-    internal fun ruleSetOrNull(): RuleSet? = built
+    /** The rule set the script built, or null when it never called `byterails { }`. Read by the loader in the core. */
+    fun ruleSetOrNull(): RuleSet? = built
 }
 
 object ByterailsScriptCompilationConfiguration : ScriptCompilationConfiguration({
