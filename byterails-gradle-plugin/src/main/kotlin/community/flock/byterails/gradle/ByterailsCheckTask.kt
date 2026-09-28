@@ -102,7 +102,14 @@ abstract class ByterailsCheckTask : DefaultTask() {
         ) { line -> logger.lifecycle(line) }
         if (violations > 0 && !reportOnly.get()) {
             val noun = if (violations == 1) "violation" else "violations"
-            throw GradleException("byterails found $violations $noun; see the lines above or $report")
+            throw GradleException("byterails: $violations $noun, listed above; every reference is in ${relative(report)}")
         }
+    }
+
+    /** The report as a developer names it: relative to the project directory when it lies inside it. */
+    private fun relative(file: File): String {
+        val projectDir = File(moduleRulesFileConfigured.get()).absoluteFile.parentFile ?: return file.path
+        val relative = file.absoluteFile.relativeToOrNull(projectDir)?.invariantSeparatorsPath ?: return file.path
+        return if (relative.startsWith("..")) file.path else relative
     }
 }

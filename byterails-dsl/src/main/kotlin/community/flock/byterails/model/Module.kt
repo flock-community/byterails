@@ -100,8 +100,8 @@ private fun expand(module: ModuleRules, root: ModuleRoot, roots: List<ModuleRoot
     }
     val rootRules = sliced.rootRules.map(::resolve) + exportedByOthers
     val declaredRoot = prefixed.firstOrNull { it.prefix == root.prefix }
-    val moduleRoot = declaredRoot?.copy(rules = rootRules + declaredRoot.rules.map(::resolve))
-        ?: PackageDeclaration(root.prefix, rootRules, null, null)
+    val moduleRoot = declaredRoot?.copy(rules = rootRules + declaredRoot.rules.map(::resolve), role = DeclarationRole.MODULE_ROOT, module = module.name)
+        ?: PackageDeclaration(root.prefix, rootRules, null, null, role = DeclarationRole.MODULE_ROOT, module = module.name)
     val packages = prefixed.filter { it !== declaredRoot }.map { declaration -> declaration.copy(rules = declaration.rules.map(::resolve)) }
     return listOf(moduleRoot) + packages
 }

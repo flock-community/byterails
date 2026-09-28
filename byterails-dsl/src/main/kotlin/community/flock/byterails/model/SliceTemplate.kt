@@ -37,7 +37,7 @@ data class SliceTemplate(
                     Rule(RuleKind.ALLOW, Prefix.concat(other, api), location, "${Rule.EXPORTED_GROUP}$id:${api.name}")
                 }
             }
-            val sliceDeclaration = PackageDeclaration(sliceRoot, rules.map(::resolve) + exportedAllows, naming, location)
+            val sliceDeclaration = PackageDeclaration(sliceRoot, rules.map(::resolve) + exportedAllows, naming, location, role = DeclarationRole.SLICE_ROOT)
             val packageDeclarations = packages.map { template ->
                 template.copy(prefix = Prefix.concat(sliceRoot, template.prefix), rules = template.rules.map(::resolve))
             }

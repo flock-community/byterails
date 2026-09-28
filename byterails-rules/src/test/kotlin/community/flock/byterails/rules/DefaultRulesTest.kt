@@ -101,7 +101,8 @@ class DefaultRulesTest {
         assertTrue(customer.isNotEmpty())
         assertTrue(customer.all { it.kind == ViolationKind.NOT_ALLOWED && it.target?.name == "fixtures.lib.messaging.EventBus" }, customer.toString())
         assertEquals(listOf("[hexagonal]"), customer[0].allows)
-        assertTrue(customer[0].hint!!.contains("[hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang"), customer[0].hint)
+        assertEquals("the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text", customer[0].ruleSets["hexagonal"])
+        assertEquals("move the code; pkg(\"fixtures.slices.customers.domain\") comes from the hexagonal rule set and is isolated, so the rules file cannot widen it", customer[0].fix)
         assertEquals(emptyList(), result.violations.filter { it.className.name == "fixtures.slices.orders.domain.Order" })
     }
 
@@ -120,7 +121,8 @@ class DefaultRulesTest {
         val metadata = withJavaOnly.violations.first { it.target?.name == "kotlin.Metadata" }
         assertEquals(ViolationKind.NOT_ALLOWED, metadata.kind)
         assertEquals(listOf("[java]"), metadata.allows)
-        assertTrue(metadata.hint!!.contains("allow(\"kotlin\")") && metadata.hint!!.contains("[java] is the Java standard library"), metadata.hint)
+        assertTrue(metadata.hint!!.contains("allow(\"kotlin\")"), metadata.hint)
+        assertEquals(mapOf("java" to "the Java standard library"), metadata.ruleSets)
         assertTrue(withJavaOnly.violations.none { it.target?.name?.startsWith("java.") == true })
     }
 

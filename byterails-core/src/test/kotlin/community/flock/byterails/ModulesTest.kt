@@ -227,12 +227,16 @@ class ModulesTest {
         assertTrue(outside.all { it.kind == ViolationKind.WRONG_MODULE }, outside.filter { it.kind != ViolationKind.WRONG_MODULE }.toString())
         assertEquals(outside.size, outside.map { it.className }.distinct().size, "one violation per class")
         val app = outside.first { it.className.name == "fixtures.app.domain.Order" }
-        assertEquals("fixtures.app.domain.Order is compiled in module \"slices.orders\", which owns \"fixtures.slices.orders\", but lies outside it", app.message)
+        assertEquals("fixtures.app.domain.Order is compiled in module \"slices.orders\" but lies outside its package fixtures.slices.orders", app.message)
         val other = outside.first { it.className.name == "fixtures.slices.customers.domain.Customer" }
-        assertEquals("fixtures.slices.customers.domain.Customer belongs to module \"slices.customers\", which owns \"fixtures.slices.customers\", but is compiled in module \"slices.orders\"", other.message)
+        assertEquals("fixtures.slices.customers.domain.Customer belongs to module \"slices.customers\", which owns fixtures.slices.customers, but is compiled in module \"slices.orders\"", other.message)
         assertTrue(result.violations.none { it.className.name.startsWith("fixtures.slices.orders") && it.kind == ViolationKind.WRONG_MODULE })
         assertEquals(
-            listOf("byterails: WRONG MODULE fixtures.app.domain", "  module   is compiled in module \"slices.orders\", which owns \"fixtures.slices.orders\", but lies outside it", "  Order  Order.kt"),
+            listOf(
+                "byterails: WRONG MODULE fixtures.app.domain is compiled in module \"slices.orders\" but lies outside its package fixtures.slices.orders",
+                "  fix      move the classes under fixtures.slices.orders, or into the project of the module that owns them",
+                "  Order.kt  Order",
+            ),
             ConsoleReporter.render(ViolationGroup.of(listOf(app)).single()),
         )
     }

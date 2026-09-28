@@ -1,6 +1,7 @@
 package community.flock.byterails.dsl
 
 import community.flock.byterails.model.ConfigException
+import community.flock.byterails.model.DeclarationRole
 import community.flock.byterails.model.Export
 import community.flock.byterails.model.NamePattern
 import community.flock.byterails.model.NamingRules
@@ -59,7 +60,7 @@ class ByterailsBuilder internal constructor(private val group: String? = null) {
      */
     fun basePackage(block: PackageBuilder.() -> Unit = {}) {
         val location = SourceLocation.capture()
-        packages += PackageBuilder(Prefix.ROOT, location, group).apply(block).build()
+        packages += PackageBuilder(Prefix.ROOT, location, group, DeclarationRole.BASE_PACKAGE).apply(block).build()
     }
 
     /**
@@ -151,6 +152,7 @@ class PackageBuilder internal constructor(
     private val prefix: Prefix,
     private val location: SourceLocation?,
     private val group: String? = null,
+    private val role: DeclarationRole = DeclarationRole.PACKAGE,
 ) {
     private val rules = mutableListOf<Rule>()
     private var naming: NamingRules? = null
@@ -206,7 +208,7 @@ class PackageBuilder internal constructor(
         naming = NamingRules(patterns, location)
     }
 
-    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location, isolated, flat, group)
+    internal fun build(): PackageDeclaration = PackageDeclaration(prefix, rules.toList(), naming, location, isolated, flat, group, role)
 }
 
 @ByterailsDsl

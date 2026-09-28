@@ -164,8 +164,16 @@ public class CheckMojo extends AbstractMojo {
 
         if (violations > 0 && !reportOnly) {
             String noun = violations == 1 ? "violation" : "violations";
-            throw new MojoFailureException("byterails found " + violations + " " + noun + "; see the lines above or " + reportFile);
+            throw new MojoFailureException("byterails: " + violations + " " + noun + ", listed above; every reference is in " + relative(reportFile));
         }
+    }
+
+    /** The report as a developer names it: relative to the module directory when it lies inside it. */
+    private String relative(File file) {
+        File base = project == null ? null : project.getBasedir();
+        if (base == null) return file.getPath();
+        String path = base.toPath().toAbsolutePath().relativize(file.toPath().toAbsolutePath()).toString().replace(File.separatorChar, '/');
+        return path.startsWith("..") ? file.getPath() : path;
     }
 
     /**

@@ -8,7 +8,6 @@ import community.flock.byterails.check.Violation
 import community.flock.byterails.check.ViolationKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class CheckerTest {
@@ -25,13 +24,13 @@ class CheckerTest {
     fun `an undeclared package is reported once per class`() {
         val undeclared = of(ViolationKind.UNDECLARED_PACKAGE)
         assertEquals(listOf("fixtures.undeclared.Stray"), undeclared.map { it.className.name })
-        assertTrue(undeclared[0].message.contains("\"fixtures.undeclared\" is not declared"), undeclared[0].message)
+        assertEquals("fixtures.undeclared.Stray lies in package fixtures.undeclared, which is not declared", undeclared[0].message)
     }
 
     @Test
     fun `a deny wins wherever the reference hides`() {
         val denied = on("fixtures.app.domain.OrderService").filter { it.kind == ViolationKind.DENIED }
-        assertTrue(denied.any { it.targets("fixtures.lib.persistence.EntityManager") && (it.site as Site.Method).name == "managers" })
+        assertTrue(denied.any { it.targets("fixtures.lib.persistence.EntityManager") && it.occurrences.any { o -> (o.site as? Site.Method)?.name == "managers" } })
         assertTrue(denied.any { it.targets("fixtures.lib.persistence.PersistenceException") })
         assertEquals("deny(\"fixtures.lib.persistence\")", denied[0].rule?.text)
         assertEquals("fixtures.app.domain", denied[0].rule?.declaringPackage)
@@ -41,7 +40,7 @@ class CheckerTest {
     fun `an exclusive owned elsewhere is reported with its owner`() {
         val exclusive = on("fixtures.app.domain.OrderService").filter { it.kind == ViolationKind.EXCLUSIVE }
         val lambda = exclusive.first { it.targets("fixtures.lib.web.RestTemplate") }
-        assertNotNull(lambda.line, "the lambda body has line numbers")
+        assertTrue(lambda.lines.isNotEmpty(), "the lambda body has line numbers")
         assertEquals("exclusive(\"fixtures.lib.web\")", lambda.rule?.text)
         assertEquals("fixtures.app.infra.web", lambda.rule?.declaringPackage)
         assertTrue(exclusive.any { it.targets("fixtures.lib.jooq.DSLContext") }, "the local variable type is exclusive to persistence")
@@ -58,7 +57,7 @@ class CheckerTest {
         val notAllowed = on("fixtures.app.domain.OrderService").filter { it.kind == ViolationKind.NOT_ALLOWED }
         val timer = notAllowed.single { it.targets("fixtures.lib.util.Timer") }
         assertEquals(listOf("java.lang", "java.util", "kotlin", "org.jetbrains.annotations"), timer.allows)
-        assertTrue(timer.message.contains("\"fixtures.app.domain\" is not allowed to use"), timer.message)
+        assertEquals("fixtures.app.domain.OrderService uses fixtures.lib.util.Timer, which no rule allows", timer.message)
     }
 
     @Test
@@ -80,7 +79,7 @@ class CheckerTest {
     @Test
     fun `java references are found in signatures, bootstrap arguments and record components`() {
         val javaUser = on("fixtures.app.javainterop.JavaUser")
-        assertTrue(javaUser.any { it.kind == ViolationKind.NOT_ALLOWED && it.targets("fixtures.lib.persistence.EntityManager") && it.site == Site.Field("managers") })
+        assertTrue(javaUser.any { it.kind == ViolationKind.NOT_ALLOWED && it.targets("fixtures.lib.persistence.EntityManager") && it.occurrences.any { o -> o.site == Site.Field("managers") } })
         assertTrue(javaUser.any { it.kind == ViolationKind.EXCLUSIVE && it.targets("fixtures.lib.web.RestTemplate") })
         val point = on("fixtures.app.javainterop.JavaUser\$Point")
         assertTrue(point.any { it.kind == ViolationKind.EXCLUSIVE && it.targets("fixtures.lib.jooq.DSLContext") })
@@ -100,7 +99,7 @@ class CheckerTest {
         )
         val wrong = of(ViolationKind.NAMING).first { it.className.simpleName == "Wrong" }
         assertEquals("naming { endsWith(\"UseCase\") }", wrong.rule?.text)
-        assertTrue(wrong.message.contains("matches none of endsWith(\"UseCase\")"), wrong.message)
+        assertEquals("fixtures.app.application.Wrong must end with \"UseCase\"", wrong.message)
     }
 
     @Test
@@ -122,8 +121,25 @@ class CheckerTest {
     }
 
     @Test
-    fun `the same violation is reported once per class, target and site`() {
-        val keys = result.violations.map { Triple(it.className, it.target, it.site) }
+    fun `the same violation is reported once per class and target, with every site as an occurrence`() {
+        val keys = result.violations.map { it.className to it.target }
         assertEquals(keys.distinct().size, keys.size)
+        val caught = on("fixtures.app.domain.OrderService").single { it.targets("java.io.PrintStream") }
+        assertEquals(listOf("local", "caught"), caught.occurrences.map { it.member }.distinct())
+        assertEquals(listOf(22, 28, 30), caught.lines)
+    }
+
+    @Test
+    fun `members the compiler generated fold into the member the developer wrote`() {
+        val point = on("fixtures.app.javainterop.JavaUser\$Point").single { it.targets("fixtures.lib.jooq.DSLContext") }
+        assertEquals(listOf("ctx"), point.occurrences.mapNotNull { it.member }.distinct(), "the record component; accessor, constructor, equals, hashCode and toString are generated")
+        assertEquals(5, point.occurrences.filter { it.member == null }.map { it.site }.distinct().size, point.occurrences.toString())
+        val lambda = on("fixtures.app.domain.OrderService\$later\$fetch\$1").single { it.targets("fixtures.lib.web.RestTemplate") }
+        assertEquals("fixtures.app.domain.OrderService", lambda.reportedClass.name, "a suspend lambda is reported under the class it was written in")
+        assertEquals(setOf("later"), lambda.occurrences.map { it.member }.toSet(), "and under the method it was written in")
+        val outer = on("fixtures.app.domain.OrderService").single { it.targets("fixtures.lib.web.RestTemplate") }
+        assertEquals(setOf("lambdaOnly", "later"), outer.occurrences.mapNotNull { it.member }.toSet(), "the lambda body method is named after its method")
+        val customer = result.violations.single { it.className.name == "fixtures.slices.customers.domain.Customer" }
+        assertEquals(listOf("bus", "the constructor", "rename"), customer.occurrences.mapNotNull { it.member }.distinct())
     }
 }
