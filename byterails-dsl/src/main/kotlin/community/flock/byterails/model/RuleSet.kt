@@ -150,6 +150,8 @@ data class RuleSet(
     val exported: List<Export> = emptyList(),
     val modules: List<ModuleRoot> = emptyList(),
     val module: String? = null,
+    /** What the DSL found wrong while the rules were built, reported together with what the validator finds. */
+    val problems: List<ConfigProblem> = emptyList(),
 )
 
 /**
@@ -170,8 +172,9 @@ fun RuleSet.including(other: RuleSet, sliced: Boolean): RuleSet {
             rootRules = rootRules + roots,
             packages = packages + other.packages,
             sliceTemplate = template.copy(packages = template.packages + slicePackages),
+            problems = problems + other.problems,
         )
     } else {
-        copy(rootRules = rootRules + roots, packages = packages + other.packages + slicePackages)
+        copy(rootRules = rootRules + roots, packages = packages + other.packages + slicePackages, problems = problems + other.problems)
     }
 }

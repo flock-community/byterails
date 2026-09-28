@@ -370,7 +370,11 @@ class ByterailsPluginFunctionalTest {
             domain,
         )
         val result = runner(dir).buildAndFail()
-        assertTrue(result.output.contains("byterails: invalid configuration"), result.output)
-        assertTrue(result.output.contains("byterails.kts:3: exclusive(\"java.util\") in \"com.acme.b\" clashes"), result.output)
+        assertTrue(result.output.contains("byterails: 1 problem in byterails.kts"), result.output)
+        assertTrue(
+            result.output.contains("byterails.kts:3: exclusive(\"java.util\") in pkg(\"com.acme.b\") clashes with exclusive(\"java.util\") in pkg(\"com.acme.a\") at byterails.kts:2; only one package can own it"),
+            result.output,
+        )
+        assertTrue(result.output.contains("      pkg(\"com.acme.b\") { exclusive(\"java.util\") }"), result.output)
     }
 }

@@ -46,17 +46,16 @@ class Prefix private constructor(val segments: List<String>) : Comparable<Prefix
         /**
          * Parses [text] into a prefix.
          *
-         * @throws IllegalArgumentException with a human-readable reason when the text is malformed.
+         * @throws IllegalArgumentException whose message is the reason, written to follow the name it is
+         *   about: `pkg("com.acme.") must not start or end with a dot`.
          */
         fun parse(text: String): Prefix {
             val trimmed = text.trim()
-            require(trimmed.isNotEmpty()) { "prefix is empty" }
-            require(!trimmed.startsWith('.') && !trimmed.endsWith('.')) {
-                "prefix \"$text\" must not start or end with a dot"
-            }
+            require(trimmed.isNotEmpty()) { "is empty" }
+            require(!trimmed.startsWith('.') && !trimmed.endsWith('.')) { "must not start or end with a dot" }
             val segments = trimmed.split('.').flatMap { segment ->
-                require(segment.isNotEmpty()) { "prefix \"$text\" contains an empty segment" }
-                require(isIdentifier(segment)) { "segment \"$segment\" in prefix \"$text\" is not a valid identifier" }
+                require(segment.isNotEmpty()) { "contains an empty segment" }
+                require(isIdentifier(segment)) { "has the segment \"$segment\", which is not a valid identifier" }
                 segment.split('$')
             }
             return Prefix(segments)

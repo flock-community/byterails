@@ -64,7 +64,9 @@ class DefaultRulesTest {
         val flat = RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("hexagonal"), sliced = false).withBasePackage("com.acme")
         assertEquals(listOf("com.acme.domain"), flat.packages.map { it.name })
         val error = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("onion"), sliced = false) }
-        assertTrue(error.message!!.contains("known: java, kotlin, hexagonal"), error.message)
+        assertTrue(error.message!!.contains("\"onion\" is not a default rule set; the known sets are java, kotlin, hexagonal, hexagonalSpring"), error.message)
+        val typo = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("hexagonl"), sliced = false) }
+        assertTrue(typo.message!!.contains("did you mean \"hexagonal\"?"), typo.message)
     }
 
     @Test

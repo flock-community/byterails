@@ -58,16 +58,19 @@ fun RuleSet.withSlices(slices: List<String>?): RuleSet {
     val template = sliceTemplate
     if (template == null) {
         if (names.isEmpty()) return this
-        throw ConfigException("slices ${names.joinToString(", ")} are configured, but the rules file has no slice { } block")
+        throw ConfigException(
+            "slices ${names.joinToString(", ")} are configured in the build, but the rules file has no slice { } block; add one or remove the slices",
+            phase = ConfigPhase.SETTINGS,
+        )
     }
     if (names.isEmpty()) {
-        throw ConfigException("the rules file has a slice { } block, but no slices are configured; name them in the build", template.location)
+        throw ConfigException("the slice { } block needs slices, but no slices are configured in the build", template.location, ConfigPhase.SETTINGS)
     }
     val prefixes = names.map { name ->
         try {
             Prefix.parse(name)
         } catch (e: IllegalArgumentException) {
-            throw ConfigException("slice ${e.message}")
+            throw ConfigException("the slice name \"$name\" ${e.message}", phase = ConfigPhase.SETTINGS)
         }
     }
     return copy(packages = packages + template.expand(prefixes), sliceTemplate = null)

@@ -16,6 +16,10 @@ internal object ToolRunner {
 
     private const val RUNNER_CLASS = "community.flock.byterails.ByterailsRunner"
 
+    private const val CONFIG_EXCEPTION = "community.flock.byterails.model.ConfigException"
+
+    private const val ISSUES = "https://github.com/flock-community/byterails/issues"
+
     private val loaders = ConcurrentHashMap<String, URLClassLoader>()
 
     /**
@@ -74,7 +78,13 @@ internal object ToolRunner {
             }
         } catch (e: InvocationTargetException) {
             val cause = e.targetException
-            throw GradleException(cause.message ?: cause.toString(), cause)
+            // A configuration error is the message the core wrote; anything else is a bug or an unreadable class file.
+            if (cause.javaClass.name == CONFIG_EXCEPTION) throw GradleException(cause.message ?: cause.toString(), cause)
+            detail.accept(cause.stackTraceToString())
+            throw GradleException(
+                "byterails: internal error: ${cause.message ?: cause}; run with --stacktrace or $VERBOSE_SWITCH for the stack trace, and please report it at $ISSUES",
+                cause,
+            )
         } finally {
             Thread.currentThread().contextClassLoader = previous
         }

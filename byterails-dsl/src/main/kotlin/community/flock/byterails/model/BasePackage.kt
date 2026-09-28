@@ -14,7 +14,7 @@ fun RuleSet.withBasePackage(basePackage: String?): RuleSet {
     val base = try {
         Prefix.parse(basePackage)
     } catch (e: IllegalArgumentException) {
-        throw ConfigException("base package ${e.message}")
+        throw ConfigException("the base package \"$basePackage\" ${e.message}", phase = ConfigPhase.SETTINGS)
     }
     val declared = packages.map { it.copy(prefix = Prefix.concat(base, it.prefix)) }
     fun resolve(rule: Rule): Rule {

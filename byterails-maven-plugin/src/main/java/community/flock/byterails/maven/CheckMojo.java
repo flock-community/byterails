@@ -16,6 +16,8 @@ import org.codehaus.plexus.util.xml.Xpp3Dom;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -38,6 +40,8 @@ public class CheckMojo extends AbstractMojo {
 
     /** How a Maven build turns verbose output on, named in the lines that say what was left out. */
     static final String VERBOSE_SWITCH = "-Dbyterails.verbose=true";
+
+    static final String ISSUES = "https://github.com/flock-community/byterails/issues";
 
     /** The rules file. Defaults to {@code byterails.kts} in the multi-module root directory. */
     @Parameter(property = "byterails.rulesFile", defaultValue = "${maven.multiModuleProjectDirectory}/byterails.kts")
@@ -142,7 +146,7 @@ public class CheckMojo extends AbstractMojo {
         List<Map<String, Object>> modules = modules(currentModule);
         boolean hasDefaults = defaultRules != null && !defaultRules.isEmpty();
         if (!rulesFile.isFile() && !hasDefaults && modules.isEmpty()) {
-            throw new MojoFailureException("byterails: rules file " + rulesFile + " does not exist and no defaultRules are set");
+            throw new MojoFailureException("byterails: the rules file " + rulesFile + " does not exist and no defaultRules are set; add the file or set <defaultRules>");
         }
         if (currentModule == null && moduleRulesFile != null && moduleRulesFile.isFile() && !sameFile(moduleRulesFile, rulesFile)) {
             throw new MojoFailureException("byterails: " + moduleRulesFile + " is a module rules file, but the module sets no <module> name");
@@ -174,7 +178,13 @@ public class CheckMojo extends AbstractMojo {
         } catch (ConfigException e) {
             throw new MojoFailureException(e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new MojoExecutionException("byterails failed: " + e, e);
+            // A bug or an unreadable class file: the trace goes where the verbose lines go.
+            StringWriter trace = new StringWriter();
+            e.printStackTrace(new PrintWriter(trace));
+            if (verbose) getLog().info(trace.toString()); else getLog().debug(trace.toString());
+            String message = e.getMessage() == null ? e.toString() : e.getMessage();
+            throw new MojoExecutionException("byterails: internal error: " + message + "; run with -e or " + VERBOSE_SWITCH
+                    + " for the stack trace, and please report it at " + ISSUES, e);
         } finally {
             Thread.currentThread().setContextClassLoader(previous);
         }

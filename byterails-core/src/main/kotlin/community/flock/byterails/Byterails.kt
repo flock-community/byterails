@@ -4,6 +4,7 @@ import community.flock.byterails.analysis.ClassDirScanner
 import community.flock.byterails.check.CheckResult
 import community.flock.byterails.check.Checker
 import community.flock.byterails.model.ConfigException
+import community.flock.byterails.model.ConfigPhase
 import community.flock.byterails.model.ConfigProblem
 import community.flock.byterails.model.ModuleRules
 import community.flock.byterails.model.RuleSet
@@ -62,8 +63,8 @@ object Byterails {
         val fromFile = when {
             rulesFile != null && rulesFile.isFile -> ScriptLoader.load(rulesFile, scriptCacheDir, displayName(rulesFile))
             defaults.isNotEmpty() || modules.isNotEmpty() -> RuleSet(emptyList(), emptyList())
-            rulesFile == null -> throw ConfigException("no rules file and no default rules configured")
-            else -> throw ConfigException("rules file ${rulesFile.path} does not exist")
+            rulesFile == null -> throw ConfigException("no rules file is configured and no default rules are set; add a byterails.kts or set defaultRules", phase = ConfigPhase.SETTINGS)
+            else -> throw ConfigException("the rules file ${rulesFile.path} does not exist", phase = ConfigPhase.SETTINGS)
         }
         val sliced = slices.orEmpty().any { it.isNotBlank() }
         val moduleRules = modules.map { configuration ->
@@ -73,12 +74,18 @@ object Byterails {
             ModuleRules(configuration.name, own.withDefaultRules(configuration.defaultRules, moduleSlices.isNotEmpty()), moduleSlices)
         }
         val ruleSet = fromFile.withDefaultRules(defaults, sliced).withSlices(slices).withModules(moduleRules, module).withBasePackage(basePackage)
-        return Loaded(ruleSet, validate(ruleSet))
+        // Every problem of every file in one run, each with the line it is on.
+        val files = (listOfNotNull(rulesFile?.takeIf { it.isFile }) + modules.mapNotNull { it.rulesFile?.takeIf { file -> file.isFile } })
+            .associateBy { displayName(it) }
+        val problems = ScriptLoader.attachSource(ruleSet.problems + RuleSetValidator.validate(ruleSet), files)
+        val errors = problems.filter { it.severity == Severity.ERROR }
+        if (errors.isNotEmpty()) throw ConfigException(errors)
+        return Loaded(ruleSet, problems)
     }
 
-    /** Validates a rule set and returns its warnings. */
+    /** Validates a rule set, together with what the DSL found wrong while building it, and returns its warnings. */
     fun validate(ruleSet: RuleSet): List<ConfigProblem> {
-        val problems = RuleSetValidator.validate(ruleSet)
+        val problems = ruleSet.problems + RuleSetValidator.validate(ruleSet)
         val errors = problems.filter { it.severity == Severity.ERROR }
         if (errors.isNotEmpty()) throw ConfigException(errors)
         return problems

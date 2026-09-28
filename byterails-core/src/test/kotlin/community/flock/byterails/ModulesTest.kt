@@ -161,24 +161,24 @@ class ModulesTest {
     fun `configuration errors name the module`() {
         fun error(block: () -> Unit) = assertFailsWith<ConfigException>(block = block).message!!
 
-        assertTrue(error { root.withModules(listOf(ModuleRules("or ders", RuleSet(emptyList(), emptyList()))), null) }.contains("module name segment"))
+        assertTrue(error { root.withModules(listOf(ModuleRules("or ders", RuleSet(emptyList(), emptyList()))), null) }.contains("the module name \"or ders\" has the segment \"or ders\", which is not a valid identifier"))
         assertTrue(error { root.withModules(listOf(orders, ModuleRules("orders", RuleSet(emptyList(), emptyList()))), null) }.contains("configured more than once"))
         assertTrue(error { root.withModules(listOf(orders, ModuleRules("orders.billing", RuleSet(emptyList(), emptyList()))), null) }.contains("lies inside module \"orders\""))
         assertTrue(error { root.withModules(listOf(orders), "shipping") }.contains("not among the configured modules: orders"))
-        assertTrue(error { root.withModules(emptyList(), "orders") }.contains("no modules are known"))
+        assertTrue(error { root.withModules(emptyList(), "orders") }.contains("the build knows no modules"))
 
         val handWritten = error { root.withModules(listOf(ModuleRules("orders", byterails { basePackage { flat() } })), null) }
         assertTrue(handWritten.contains("basePackage { } is not allowed in the rules file of module \"orders\""), handWritten)
 
         val sliceless = error { root.withModules(listOf(ModuleRules("orders", byterails { slice { pkg("api") } })), null) }
-        assertTrue(sliceless.contains("module \"orders\": the rules file has a slice { } block, but no slices are configured"), sliceless)
+        assertTrue(sliceless.contains("module \"orders\": the slice { } block needs slices, but no slices are configured in the build"), sliceless)
 
         val rootExports = byterails { exported("api"); pkg("com.acme") }
-        assertTrue(RuleSetValidator.validate(rootExports).any { it.message.contains("exported(\"api\") is only meaningful in the rules file of a module") })
+        assertTrue(RuleSetValidator.validate(rootExports).any { it.message.contains("exported(\"api\") belongs in the rules file of a module") })
 
         val declaredTwice = byterails { allow("kotlin"); pkg("orders") }.withModules(listOf(orders), null).withBasePackage("com.acme")
         val problem = RuleSetValidator.validate(declaredTwice).single()
-        assertTrue(problem.message.contains("\"com.acme.orders\" is the root of module \"orders\""), problem.message)
+        assertTrue(problem.message.contains("pkg(\"com.acme.orders\") is the root of module \"orders\""), problem.message)
     }
 
     private val fixtureModules = listOf(
@@ -308,7 +308,8 @@ class ModulesTest {
 
         File(dir, "customers/byterails.kts").apply { parentFile.mkdirs() }.writeText("byterails {\n    pkg(\"domain\") { exclusive(\"java.util\") }\n}\n")
         val clash = assertFailsWith<ConfigException> { Byterails.load(File(dir, "byterails.kts"), null, "com.acme", null, null, modules, "customers", dir) }
-        assertTrue(clash.message!!.contains("customers/byterails.kts:2: exclusive(\"java.util\") in \"com.acme.customers.domain\" clashes"), clash.message)
+        assertTrue(clash.message!!.contains("customers/byterails.kts:2: exclusive(\"java.util\") in pkg(\"com.acme.customers.domain\") clashes with exclusive(\"java.util\") in pkg(\"com.acme.orders.domain\") at orders/byterails.kts:4; only one package can own it"), clash.message)
+        assertTrue(clash.message!!.contains("      pkg(\"domain\") { exclusive(\"java.util\") }"), clash.message)
 
         val absentRoot = Byterails.load(File(dir, "missing.kts"), null, "com.acme", null, null, listOf(ModuleConfiguration("orders", ordersFile)), "orders", dir)
         assertEquals(listOf("com.acme.orders", "com.acme.orders.api", "com.acme.orders.domain"), absentRoot.ruleSet.packages.map { it.name }, "with modules the root file may be absent")

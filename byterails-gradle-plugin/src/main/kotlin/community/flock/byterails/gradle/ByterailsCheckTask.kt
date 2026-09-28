@@ -88,7 +88,9 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val moduleSpecs = modules.get()
         val currentModule = module.orNull?.trim()?.takeIf { it.isNotEmpty() }
         if (rules == null && defaultRules.get().isEmpty() && moduleSpecs.isEmpty()) {
-            throw GradleException("byterails: rules file ${rulesFileConfigured.get()} does not exist and no defaultRules are set")
+            throw GradleException(
+                "byterails: the rules file ${rulesFileConfigured.get()} does not exist and no defaultRules are set; add the file or set byterails { defaultRules }",
+            )
         }
         if (currentModule == null) {
             val candidate = File(moduleRulesFileConfigured.get())

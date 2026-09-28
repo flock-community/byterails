@@ -147,7 +147,8 @@ class RuleSetValidatorTest {
         val error = assertFailsWith<ConfigException> {
             Byterails.validate(byterails { pkg("a"); pkg("a") })
         }
-        assertTrue(error.message!!.startsWith("byterails: invalid configuration"), error.message)
+        assertTrue(error.message!!.startsWith("byterails: 1 problem in the rules"), error.message)
+        assertTrue(error.message!!.contains("pkg(\"a\") is declared twice"), error.message)
         val warnings = Byterails.validate(byterails { allow("kotlin.collections") })
         assertEquals(1, warnings.size)
     }

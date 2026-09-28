@@ -27,8 +27,9 @@ abstract class ByterailsScript {
     private var built: RuleSet? = null
 
     fun byterails(block: ByterailsBuilder.() -> Unit) {
-        if (built != null) throw ConfigException("byterails { } may appear only once", SourceLocation.capture())
-        built = community.flock.byterails.dsl.byterails(block)
+        if (built != null) throw ConfigException("byterails { } appears twice; a rules file calls it once", SourceLocation.capture())
+        // Built without throwing: what the DSL finds wrong travels in the rule set, so the loader reports it together with what the validator finds.
+        built = ByterailsBuilder().apply(block).build()
     }
 
     /** The rule set the script built, or null when it never called `byterails { }`. Read by the loader in the core. */

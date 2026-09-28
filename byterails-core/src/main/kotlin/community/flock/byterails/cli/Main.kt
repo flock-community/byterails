@@ -10,9 +10,11 @@ import kotlin.system.exitProcess
  * [--base-package com.acme] [--slices orders,customers] [--default-rules hexagonal] [--report build/byterails.json] [--cache build/byterails-cache]
  * [--report-only] [--verbose]`
  *
- * Exit status: 0 clean, 1 violations, 2 configuration or usage error.
+ * Exit status: 0 clean, 1 violations, 2 when the check could not run: a configuration or usage error, or an internal error.
  */
 object Main {
+
+    private const val ISSUES = "https://github.com/flock-community/byterails/issues"
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -53,6 +55,11 @@ object Main {
             }
         } catch (e: ConfigException) {
             System.err.println(e.message)
+            if (verbose) e.printStackTrace()
+            exitProcess(2)
+        } catch (e: RuntimeException) {
+            System.err.println("byterails: internal error: ${e.message ?: e.toString()}")
+            System.err.println("  ${if (verbose) "the stack trace follows" else "run with --verbose for the stack trace"}; please report it at $ISSUES")
             if (verbose) e.printStackTrace()
             exitProcess(2)
         }
