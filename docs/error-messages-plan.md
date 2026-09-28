@@ -1,6 +1,8 @@
 # Plan: clear messages and a verbose mode
 
-As of 2026-09-25. A proposal, not yet decided; the open decisions are listed at the end.
+Written 2026-09-25, implemented 2026-09-28 on the branch that carries it, with the recommended answer to
+each of the decisions at the end. Kept as the record of the reasoning; the samples under "What a developer
+saw before" show the output this plan replaced, and the README and the PRD describe the output as it is.
 
 ## Summary
 
@@ -13,10 +15,10 @@ to the CLI, Gradle and Maven that prints every reference, every diagnostic and e
 It is four pull requests: the model, the default console format, the verbose mode, the
 configuration errors.
 
-## What a developer sees today
+## What a developer saw before
 
-The samples come from running the core's CLI on the test fixtures (`byterails-core/src/fixtures`)
-with the rules of `Fixtures.rules()`.
+The samples come from running the core's CLI, as it was before this plan, on the test fixtures
+(`byterails-core/src/fixtures`) with the rules of `Fixtures.rules()`.
 
 One suspend lambda that captures a `RestTemplate`, reported as six members of two classes:
 
@@ -289,7 +291,7 @@ The changes behind it:
 
 ## Steps
 
-Four pull requests, each green on its own, in this order.
+Four steps, each green on its own, in this order; they became four commits on one branch.
 
 1. **Model.** A violation becomes one class, kind, referenced type and deciding rule with a list of
    sites; the checker collects sites instead of deduplicating on them; generated members and synthetic

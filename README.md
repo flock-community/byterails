@@ -124,8 +124,21 @@ declaration, T exclusive to another package, a deny in P's effective rules, an a
 rules, otherwise not allowed. The last branch is what makes byterails a whitelist.
 
 The file is validated before any class file is read. Duplicate declarations, clashing exclusives,
-allows that can never apply, and malformed prefixes fail the build with the line that caused it.
-Cycles between declared packages and Kotlin package names that compile to Java ones are warnings.
+allows that can never apply, and malformed prefixes fail the build, every problem of the file in one
+run, each with the line it is on. Cycles between declared packages and Kotlin package names that
+compile to Java ones are warnings.
+
+```
+byterails: 2 problems in byterails.kts
+  byterails.kts:7: allow("java.util.concurrent") in pkg("com.acme.domain") can never apply: it is shadowed by deny("java.util") in the root block at byterails.kts:4, and deny always wins
+      allow("java.util.concurrent")
+  byterails.kts:17: pkg("com.acme.domain") is declared twice; the first is at byterails.kts:6
+      pkg("com.acme.domain")
+```
+
+A file that does not compile prints the compiler's messages the same way, with the column and a caret;
+a file that throws names the line; a build setting that does not fit the file, such as slices without
+a `slice { }` block, says so under `problems in the build settings`.
 
 ## Slices
 
@@ -239,9 +252,9 @@ modules. `basePackage { }` is not allowed in a module file, since the module roo
 A violation names a module file by its path from the root, `orders/byterails.kts:7`.
 
 ```
-byterails: WRONG MODULE com.acme.shared
-  module   is compiled in module "customers", which owns "com.acme.customers", but lies outside it
-  Misplaced  Misplaced.java
+byterails: WRONG MODULE com.acme.shared is compiled in module "customers" but lies outside its package com.acme.customers
+  fix      move the classes under com.acme.customers, or into the project of the module that owns them
+  Misplaced.java  Misplaced
 ```
 
 Maven takes the module in the plugin configuration of the module's POM:
@@ -311,14 +324,18 @@ Rule sets are broad grants, so narrowing one is expected: a `deny("javax.swing")
 `exclusive("javax.sql")` in the persistence package wins over the `java` allows, and the validator
 never reports a rule-set allow as dead.
 
-A violation reads like any other, except that allows coming from a rule set show as one token, with a
-hint that spells the set out. Here `com.acme.sales.domain.Leak` holds a `java.net.URI`:
+A violation reads like any other, except that allows coming from a rule set show as one token, the
+package row names the set, and the run ends with a legend that spells the token out. Here
+`com.acme.sales.domain.Leak` holds a `java.net.URI`:
 
 ```
-byterails: NOT ALLOWED  com.acme.sales.domain -> java.net
-  allows   [hexagonal]
-  hint     [hexagonal] is the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text
-  Leak.endpoint  URI  Leak.java
+byterails: NOT ALLOWED  com.acme.sales.domain uses java.net, which no rule allows
+  package  pkg("com.acme.sales.domain") from the hexagonal rule set, isolated
+  may use  [hexagonal]
+  fix      move the code; pkg("com.acme.sales.domain") comes from the hexagonal rule set and is isolated, so the rules file cannot widen it
+  Leak.java  Leak uses URI in endpoint
+
+byterails: [hexagonal] stands for the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text
 ```
 
 ### The hexagonalSpring layout
@@ -499,24 +516,44 @@ project against `byterails.kts` in the root project. Every project of a multi-mo
 own classes against the same file, plus the rules files of the [modules](#modules) when the build has
 them. Violations fail the task and are written to `build/reports/byterails/violations.json`.
 
-The console groups violations by root cause: the package they come from, the kind, and the package
-they point at, so every group is one line to change in the rules file or one piece of code to move.
-The rule, the allows and the hint are printed once per group, then one line per reference with the
-class and member, the referenced class, and the source location. A group shows at most ten members;
-the JSON report holds all of them.
+### Reading a violation
+
+Every violation prints as a sentence with the package as its subject, followed by what a developer
+needs to act: the block of the rules file it concerns with its line, what the package may use, a `fix`
+row naming both ways out, and one line per class that starts with the source location and names the
+members involved. Violations with the same cause, that is the same package, kind, referenced package
+and deciding rule, form one block, because they are one line to change in the rules file or one piece
+of code to move. A violation is one class and one referenced type: members the compiler generated,
+such as property accessors, record methods and lambda bodies, fold into the member the developer
+wrote, and a lambda or anonymous class is reported under the class and method it was written in.
+Undeclared packages are one table for the run.
 
 ```
-byterails: NOT ALLOWED  com.acme.domain -> org.springframework.web.client
-  allows   com.acme.domain, java.lang, java.time, java.util, kotlin
-  OrderService.place(Order) : void  RestTemplate  OrderService.kt:42
-  Shipping.client                   RestClient    Shipping.kt
+byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows
+  package  pkg("com.acme.domain") at byterails.kts:12
+  may use  com.acme.domain, java.lang, java.time, java.util, kotlin
+  fix      move the code, or add allow("org.springframework.web.client") to pkg("com.acme.domain")
+  OrderService.kt:42  OrderService uses RestTemplate in place
+  Shipping.kt         Shipping uses RestClient in client
 
-byterails: DENIED       com.acme.domain -> jakarta.persistence
-  rule     deny("jakarta.persistence")              byterails.kts:14  in "com.acme.domain"
-  Order.entityManager  EntityManager  Order.kt
+byterails: DENIED       com.acme.domain uses jakarta.persistence, which deny("jakarta.persistence") forbids
+  rule     deny("jakarta.persistence") in pkg("com.acme.domain") at byterails.kts:14
+  fix      move the code, or lift the deny
+  Order.kt  Order uses EntityManager in entityManager
 
 byterails: 3 violations in 2 groups, 1,204 classes, 17 packages
 ```
+
+The kinds: `UNDECLARED` for a class in a package no declaration covers, `WRONG MODULE` for a class
+compiled in the wrong [module](#modules), `NOT ALLOWED` when no rule allows the referenced package,
+`DENIED` when a deny forbids it, `EXCLUSIVE` when another package owns it, and `NAMING` for a class
+name that matches no pattern. A block shows at most ten classes and the undeclared table at most
+twenty packages; the JSON report under `build/reports/byterails/violations.json` holds every reference,
+one entry per class and referenced type with every site under `sites` (schema 2), and so does the
+verbose output. `-Pbyterails.verbose=true`, or `byterails { verbose.set(true) }`, prints the settings
+of the run, every reference on a line of its own with the fully qualified names and the JVM descriptor
+as they stand in the class file, and the rules in effect for every package that has a violation. The
+same lines are logged at Gradle's info level, so `--info` shows them too.
 
 A project whose packages all live under one root can set `byterails { basePackage.set("com.acme") }`
 and write the rules file relative to it: `pkg("domain")` then means `com.acme.domain`. A rule prefix
@@ -551,21 +588,26 @@ matters; `byterails { toolClasspath.setFrom(...) }` overrides where the core com
 The `check` goal runs in the `verify` phase and reads the module's compiled classes against
 `byterails.kts` in the multi-module root directory. Each module checks its own classes, violations
 fail the build, and the JSON report lands in `target/byterails/violations.json`. Properties:
-`-Dbyterails.reportOnly=true`, `-Dbyterails.skip=true`, `-Dbyterails.rulesFile=...`,
-`-Dbyterails.basePackage=...`, `-Dbyterails.slices=...`, `-Dbyterails.defaultRules=...`,
-`-Dbyterails.module=...` and `-Dbyterails.moduleRulesFile=...`. A Maven module that configures
+`-Dbyterails.reportOnly=true`, `-Dbyterails.verbose=true`, `-Dbyterails.skip=true`,
+`-Dbyterails.rulesFile=...`, `-Dbyterails.basePackage=...`, `-Dbyterails.slices=...`,
+`-Dbyterails.defaultRules=...`, `-Dbyterails.module=...` and `-Dbyterails.moduleRulesFile=...`.
+`<verbose>true</verbose>` or `-Dbyterails.verbose=true` prints every reference and the rules in effect
+as the Gradle plugin's verbose does; the same lines are logged at the debug level, so `-X` shows them
+too. A Maven module that configures
 `<module>` is a byterails [module](#modules); the goal finds the other modules' rules files through
 the reactor. The same rules file gives the same result from Gradle and Maven, because both call the
 same core.
 
 ## Command line and library
 
-The core ships a small CLI, exit status 1 on violations and 2 on a broken rules file:
+The core ships a small CLI, exit status 1 on violations and 2 when the check could not run, for a
+configuration error or an internal error. `--verbose` prints every reference and the rules in effect,
+and the stack trace behind an error:
 
 ```
 java -cp <byterails-core, byterails-rules and their dependencies> community.flock.byterails.cli.Main \
     --rules byterails.kts --classes build/classes/kotlin/main:build/classes/java/main \
-    --report build/byterails.json --report-only
+    --report build/byterails.json --report-only --verbose
 ```
 
 The same rules can be built in code with the DSL and checked from a test:
@@ -627,5 +669,5 @@ against the Central Portal's staging API; the Maven side uses the Central publis
 ## Status
 
 0.1: core library, `byterails.kts` loader, Gradle plugin, Maven plugin, CLI, slices, default rules,
-modules. Planned next:
+modules, verbose output. Planned next:
 kind-aware and annotation-conditioned naming, expiring allows, SARIF and JUnit XML reports.

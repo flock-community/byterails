@@ -215,26 +215,31 @@ A reference is any class name the compiler wrote into a class file, wherever it 
 
 The violation message is the product for most people who meet byterails, so it is specified as tightly as the rules.
 
-1. **FR-33 Violation message.** Every violation prints as one block with the kind, the class, the member when there is one, the referenced type, the rule that decided with its line in the config, and the source file from the class file's source attribute. A line number is added only when the reference sits in a method body and the line number table has one.
-2. **FR-34 Not-allowed explains itself.** A not-allowed violation lists the effective allows of the package, so the developer sees what the package may use without opening the config.
-3. **FR-35 Grouping.** The console groups violations by root cause: the source package, the kind and the target package, plus the deciding rule where there is one, so a group is one change to the rules file or one move. The shared facts print once per group, then one line per member, capped at ten with the rest left to the report file. Groups and members are in stable sorted order, followed by one summary line with the violation and group counts.
-4. **FR-36 Report-only mode.** A plugin setting or a command-line property switches every violation to a warning and lets the task succeed. It lives in the build configuration, not in the rules file, so the rules file stays a pure description of the architecture.
-5. **FR-37 Report file.** Every run writes a JSON report with the same content as the console output, under the build tool's report directory, with a stable schema. SARIF and JUnit XML are generated from it in 0.3.
-6. **FR-38 Clean run.** Zero violations print one line with the number of classes and packages checked.
-7. **FR-39 Failure shape.** The task fails with a single exception whose message is the summary line. The full list is printed above it, so the build tool's own failure output stays short.
-8. **FR-40 No suppression in code.** There is no annotation to silence a violation. The escape hatch is an allow in the config, reviewed like any other change. Expiring allows, which turn back into violations after a date, are planned for 0.3.
+1. **FR-33 Violation message.** Every violation prints as a sentence with the package as its subject, then the block of the rules file it concerns with its line, what the package may use for a not-allowed violation, a fix that names both ways out (move the code, or the one change to the rules file), and one line per class that starts with the source location and names the members involved. A violation is one class and one referenced type; every place the type was found is an occurrence with its line, and members the compiler generated (property accessors, record and data-class methods, lambda bodies, bridges) fold into the member the developer wrote. A lambda or anonymous class is reported under the class and method it was written in, read from the EnclosingMethod attribute and the Kotlin metadata kind.
+2. **FR-34 Not-allowed explains itself.** A not-allowed violation names the declaration of the package with its line, or the rule set that declared it, and lists the effective allows, so the developer sees what the package may use without opening the config.
+3. **FR-35 Grouping.** The console groups violations by root cause: the source package, the kind and the target package, plus the deciding rule where there is one, so a group is one change to the rules file or one move. The shared facts print once per group, then one line per class, capped at ten. Undeclared packages are one table for the run, capped at twenty packages. Rule sets among the allows show as one token with a legend once at the end; warnings print last. Groups and members are in stable sorted order, followed by one summary line with the violation, group and warning counts. Where a cap cuts, the line names the verbose switch of the tool that is running.
+4. **FR-35b Verbose output.** Next to the grouped output the core produces a verbose stream: the settings of the run (rules files, default rules, base package, slices, modules, class directories), every reference on one line with the fully qualified names and the JVM descriptor as they stand in the class file, and the rules in effect for every package with a violation, each with the block and line it comes from. The CLI prints it with `--verbose`; the Gradle plugin logs it at the info level, so `--info` shows it, and at the lifecycle level with `verbose` or `-Pbyterails.verbose=true`; the Maven plugin logs it at the debug level, so `-X` shows it, and at the info level with `<verbose>` or `-Dbyterails.verbose=true`.
+5. **FR-36 Report-only mode.** A plugin setting or a command-line property switches every violation to a warning and lets the task succeed. It lives in the build configuration, not in the rules file, so the rules file stays a pure description of the architecture.
+6. **FR-37 Report file.** Every run writes a JSON report with the same content as the console output, under the build tool's report directory, with a stable schema. Schema 2 has one entry per class and referenced type, with every site under `sites`, the declaration, the rule with its block and rule set, the message and the fix. SARIF and JUnit XML are generated from it in 0.3.
+7. **FR-38 Clean run.** Zero violations print one line with the number of classes and packages checked.
+8. **FR-39 Failure shape.** The task fails with a single exception whose message counts the violations and names the report file and the verbose switch. The full list is printed above it, so the build tool's own failure output stays short.
+9. **FR-39b Configuration and internal errors.** Every problem of the rules files is reported in one run under one header that says what failed: the file does not compile, failed while running, has N problems, or the build settings have N problems. Each problem carries its file and line, a compiler diagnostic its column, followed by the source line and a caret; a message reads as the line was written, `pkg("com.acme.") must not start or end with a dot`. An unreadable class file, or any other internal error, prints one message with the issue link and keeps the stack trace for the verbose output; the CLI exits with 2 for it, never with the 1 of violations found.
+10. **FR-40 No suppression in code.** There is no annotation to silence a violation. The escape hatch is an allow in the config, reviewed like any other change. Expiring allows, which turn back into violations after a date, are planned for 0.3.
 
 Two messages as a developer would see them:
 
 ```
-byterails: NOT ALLOWED  com.acme.domain -> org.springframework.web.client
-  allows   com.acme.domain, java.lang, java.time, java.util, kotlin
-  OrderService.place(Order) : void  RestTemplate  OrderService.kt:42
-  Shipping.client                   RestClient    Shipping.kt
+byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows
+  package  pkg("com.acme.domain") at byterails.kts:12
+  may use  com.acme.domain, java.lang, java.time, java.util, kotlin
+  fix      move the code, or add allow("org.springframework.web.client") to pkg("com.acme.domain")
+  OrderService.kt:42  OrderService uses RestTemplate in place
+  Shipping.kt         Shipping uses RestClient in client
 
-byterails: DENIED       com.acme.domain -> jakarta.persistence
-  rule     deny("jakarta.persistence")              byterails.kts:14  in "com.acme.domain"
-  Order.entityManager  EntityManager  Order.kt
+byterails: DENIED       com.acme.domain uses jakarta.persistence, which deny("jakarta.persistence") forbids
+  rule     deny("jakarta.persistence") in pkg("com.acme.domain") at byterails.kts:14
+  fix      move the code, or lift the deny
+  Order.kt  Order uses EntityManager in entityManager
 
 byterails: 3 violations in 2 groups, 1,204 classes, 17 packages
 ```
@@ -310,7 +315,7 @@ Decided rows come from the design interview of 20 September 2026. Proposed rows 
 | 21 | Class prefixes | A rule prefix may name a class, not only a package | Proposed |
 | 22 | Generated code | Classes annotated Generated skip naming rules only | Proposed |
 | 23 | Test classes | Excluded in 0.1 | Proposed |
-| 24 | Messages | Violation format as in FR-33 | Proposed |
+| 24 | Messages | One sentence per kind with a fix row; one violation per class and referenced type with generated members folded; undeclared packages in one table; a verbose stream with every reference; configuration problems collected per run with their source lines; internal errors as one message with an issue link | Decided |
 | 25 | Escape hatch | No suppression annotation; expiring allows in 0.3 | Proposed |
 | 26 | Cycles | Cycles among declared packages warn at load | Proposed |
 | 27 | Modules | Per-module runs; a run loads the root file plus every module's rules file; no aggregation | Decided |
