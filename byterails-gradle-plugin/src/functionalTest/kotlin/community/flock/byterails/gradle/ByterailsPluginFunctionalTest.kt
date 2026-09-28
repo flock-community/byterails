@@ -112,6 +112,27 @@ class ByterailsPluginFunctionalTest {
     }
 
     @Test
+    fun `verbose prints every reference and the rules in effect, and --info shows the same lines`() {
+        val dir = project(rules, domain, infra, offending)
+        val verbose = runner(dir, "-Pbyterails.verbose=true").buildAndFail()
+        assertTrue(verbose.output.contains("byterails: rules    byterails.kts"), verbose.output)
+        assertTrue(verbose.output.contains("byterails: build    no base package, slices or modules"), verbose.output)
+        assertTrue(
+            verbose.output.contains("byterails: EXCLUSIVE    OrderList.java  com.acme.domain.OrderList.orders uses java.util.List; exclusive(\"java.util\") in pkg(\"com.acme.infra\") at byterails.kts:6"),
+            verbose.output,
+        )
+        assertTrue(verbose.output.contains("byterails: rules of com.acme.domain: pkg(\"com.acme.domain\") at byterails.kts:3"), verbose.output)
+        assertTrue(verbose.output.contains("byterails:   allow(\"java.lang\") at the top of byterails.kts:2"), verbose.output)
+        assertTrue(verbose.output.contains("byterails: 1 violation, listed above; every reference is in build/reports/byterails/violations.json and in the output of -Pbyterails.verbose=true"), verbose.output)
+
+        val quiet = runner(dir).buildAndFail()
+        assertTrue(!quiet.output.contains("byterails: rules    "), quiet.output)
+        val info = runner(dir, "--info").buildAndFail()
+        assertTrue(info.output.contains("byterails: rules    byterails.kts"), info.output)
+        assertTrue(info.output.contains("com.acme.domain.OrderList.orders uses java.util.List"), info.output)
+    }
+
+    @Test
     fun `report-only mode keeps the build green`() {
         val dir = project(rules, domain, infra, offending)
         val result = runner(dir, "-Pbyterails.reportOnly=true").build()

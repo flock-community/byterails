@@ -15,6 +15,9 @@ class ByterailsPlugin : Plugin<Project> {
         extension.reportOnly.convention(
             project.providers.gradleProperty("byterails.reportOnly").map { it.equals("true", ignoreCase = true) }.orElse(false),
         )
+        extension.verbose.convention(
+            project.providers.gradleProperty("byterails.verbose").map { it.equals("true", ignoreCase = true) }.orElse(false),
+        )
         // The root project configures what is shared: a module project inherits its base package, and
         // the root project's slices and default rules stay with the root rules file.
         val rootExtension = if (project === project.rootProject) null else project.rootProject.extensions.findByType(ByterailsExtension::class.java)
@@ -39,6 +42,7 @@ class ByterailsPlugin : Plugin<Project> {
             task.rulesFile.set(extension.rulesFile.filter { it.asFile.isFile })
             task.rulesFileConfigured.set(extension.rulesFile.map { it.asFile.path })
             task.reportOnly.set(extension.reportOnly)
+            task.verbose.set(extension.verbose)
             task.basePackage.set(extension.basePackage)
             task.slices.set(project.provider { if (extension.module.isPresent) rootExtension?.slices?.get().orEmpty() else extension.slices.get() })
             task.defaultRules.set(project.provider { if (extension.module.isPresent) rootExtension?.defaultRules?.get().orEmpty() else extension.defaultRules.get() })

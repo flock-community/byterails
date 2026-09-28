@@ -4,6 +4,7 @@ import community.flock.byterails.analysis.Site
 import community.flock.byterails.check.CheckResult
 import community.flock.byterails.check.DeclarationRef
 import community.flock.byterails.check.Occurrence
+import community.flock.byterails.check.PackageRules
 import community.flock.byterails.check.RuleRef
 import community.flock.byterails.check.Violation
 import community.flock.byterails.check.ViolationGroup
@@ -14,6 +15,7 @@ import community.flock.byterails.model.Severity
 import community.flock.byterails.model.SourceLocation
 import community.flock.byterails.report.ConsoleReporter
 import community.flock.byterails.report.JsonReporter
+import community.flock.byterails.report.VerboseReporter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -227,6 +229,39 @@ class ReportersTest {
         assertTrue(lines[2].startsWith("  may use  org.springframework.module1.sub1, ") && lines[2].endsWith(","), lines[2])
         assertTrue(lines[3].startsWith("           org.springframework.module"), lines[3])
         assertTrue(lines.all { it.length <= 112 }, lines.joinToString("\n"))
+    }
+
+    @Test
+    fun `verbose output has one line per reference and the rules of every package`() {
+        val rules = mapOf(
+            "com.acme.domain" to PackageRules(
+                domain,
+                listOf(
+                    RuleRef("allow(\"kotlin\")", null, SourceLocation("byterails.kts", 2)),
+                    RuleRef("deny(\"jakarta.persistence\")", "com.acme.domain", SourceLocation("byterails.kts", 14), "pkg(\"com.acme.domain\")"),
+                ),
+            ),
+        )
+        val may = "no rule allows it; pkg(\"com.acme.domain\") at byterails.kts:12 may use com.acme.domain, java.lang, java.time, java.util, kotlin"
+        assertEquals(
+            listOf(
+                "byterails: DENIED       Order.kt  com.acme.domain.Order.entityManager uses jakarta.persistence.EntityManager; deny(\"jakarta.persistence\") in pkg(\"com.acme.domain\") at byterails.kts:14",
+                "byterails: NOT ALLOWED  OrderService.kt:42  com.acme.domain.OrderService.place(Lcom/acme/domain/Order;)V uses org.springframework.web.client.RestTemplate; $may",
+                "byterails: NOT ALLOWED  OrderService.kt:44  com.acme.domain.OrderService.place(Lcom/acme/domain/Order;)V uses org.springframework.web.client.RestTemplate; $may",
+                "byterails: NOT ALLOWED  OrderService.kt  com.acme.domain.OrderService.getClient()Lorg/springframework/web/client/RestTemplate; uses org.springframework.web.client.RestTemplate (generated); $may",
+                "byterails: NOT ALLOWED  OrderService.kt  com.acme.domain.OrderService.client uses org.springframework.web.client.RestTemplate; $may",
+                "byterails: NOT ALLOWED  Shipping.kt  com.acme.domain.Shipping.client uses org.springframework.web.client.RestClient; $may",
+                "byterails: NOT ALLOWED  Shipping.kt:61  com.acme.domain.Shipping\$send\$1.invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object; uses org.springframework.web.client.RestClient; $may",
+                "byterails: rules of com.acme.domain: pkg(\"com.acme.domain\") at byterails.kts:12",
+                "byterails:   allow(\"kotlin\") at the top of byterails.kts:2",
+                "byterails:   deny(\"jakarta.persistence\") in pkg(\"com.acme.domain\") at byterails.kts:14",
+            ),
+            VerboseReporter.render(result.copy(packageRules = rules)),
+        )
+        assertEquals(
+            listOf("byterails: NAMING       Order.kt  com.acme.domain.Order must end with \"UseCase\"; naming { endsWith(\"UseCase\") } in pkg(\"com.acme.domain\") at byterails.kts:9"),
+            VerboseReporter.render(misnamed),
+        )
     }
 
     @Test

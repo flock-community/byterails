@@ -7,7 +7,8 @@ import kotlin.system.exitProcess
 
 /**
  * `java -cp ... community.flock.byterails.cli.Main --rules byterails.kts --classes build/classes/kotlin/main [--classes ...]
- * [--base-package com.acme] [--slices orders,customers] [--default-rules hexagonal] [--report build/byterails.json] [--cache build/byterails-cache] [--report-only]`
+ * [--base-package com.acme] [--slices orders,customers] [--default-rules hexagonal] [--report build/byterails.json] [--cache build/byterails-cache]
+ * [--report-only] [--verbose]`
  *
  * Exit status: 0 clean, 1 violations, 2 configuration or usage error.
  */
@@ -23,6 +24,7 @@ object Main {
         var slices: List<String>? = null
         var defaultRules: List<String>? = null
         var reportOnly = false
+        var verbose = false
         var i = 0
         while (i < args.size) {
             when (val arg = args[i]) {
@@ -34,6 +36,7 @@ object Main {
                 "--slices" -> slices = (args.getOrNull(++i) ?: usage("--slices needs a comma-separated list")).split(',')
                 "--default-rules" -> defaultRules = (args.getOrNull(++i) ?: usage("--default-rules needs a comma-separated list")).split(',')
                 "--report-only" -> reportOnly = true
+                "--verbose", "-v" -> verbose = true
                 "--help", "-h" -> usage(null)
                 else -> usage("unknown argument $arg")
             }
@@ -41,10 +44,16 @@ object Main {
         }
         if (rules == null && defaultRules == null) usage("--rules or --default-rules is required")
         if (classes.isEmpty()) usage("--classes is required")
+        val options = java.util.HashMap<String, Any?>()
+        options[ByterailsRunner.VERBOSE_SWITCH] = "--verbose"
+        options[ByterailsRunner.VERBOSE] = verbose
         val count = try {
-            ByterailsRunner.run(rules, classes, report, cache, basePackage, slices, defaultRules) { println(it) }
+            ByterailsRunner.run(rules, classes, report, cache, basePackage, slices, defaultRules, null, null, null, options, { println(it) }) { line ->
+                if (verbose) println(line)
+            }
         } catch (e: ConfigException) {
             System.err.println(e.message)
+            if (verbose) e.printStackTrace()
             exitProcess(2)
         }
         exitProcess(if (count > 0 && !reportOnly) 1 else 0)
@@ -53,7 +62,8 @@ object Main {
     private fun usage(problem: String?): Nothing {
         if (problem != null) System.err.println("byterails: $problem")
         System.err.println(
-            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--base-package <package>] [--slices <a,b>] [--default-rules <a,b>] [--report <file>] [--cache <dir>] [--report-only]",
+            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--base-package <package>] [--slices <a,b>] [--default-rules <a,b>] " +
+                "[--report <file>] [--cache <dir>] [--report-only] [--verbose]",
         )
         exitProcess(2)
     }

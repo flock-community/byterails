@@ -36,6 +36,9 @@ public class CheckMojo extends AbstractMojo {
 
     static final String PLUGIN_KEY = "community.flock.byterails:byterails-maven-plugin";
 
+    /** How a Maven build turns verbose output on, named in the lines that say what was left out. */
+    static final String VERBOSE_SWITCH = "-Dbyterails.verbose=true";
+
     /** The rules file. Defaults to {@code byterails.kts} in the multi-module root directory. */
     @Parameter(property = "byterails.rulesFile", defaultValue = "${maven.multiModuleProjectDirectory}/byterails.kts")
     private File rulesFile;
@@ -91,6 +94,15 @@ public class CheckMojo extends AbstractMojo {
     /** Skips the check entirely. */
     @Parameter(property = "byterails.skip", defaultValue = "false")
     private boolean skip;
+
+    /**
+     * When true, the check also prints every reference on a line of its own, with the fully qualified names
+     * and the JVM descriptor as they stand in the class file, the settings of the run and the rules in effect
+     * for every package with a violation. The same lines are logged at the debug level on every run, so
+     * {@code -X} shows them too.
+     */
+    @Parameter(property = "byterails.verbose", defaultValue = "false")
+    private boolean verbose;
 
     /** Where the JSON report is written. */
     @Parameter(defaultValue = "${project.build.directory}/byterails/violations.json")
@@ -151,9 +163,14 @@ public class CheckMojo extends AbstractMojo {
         Thread.currentThread().setContextClassLoader(CheckMojo.class.getClassLoader());
         int violations;
         try {
+            Map<String, Object> options = new LinkedHashMap<>();
+            options.put(ByterailsRunner.VERBOSE_SWITCH, VERBOSE_SWITCH);
+            options.put(ByterailsRunner.VERBOSE, verbose);
             violations = ByterailsRunner.run(
                     rules, List.of(classesDirectory), reportFile, scriptCacheDir, basePackage, rootSlices, rootDefaultRules,
-                    multiModuleProjectDirectory, currentModule, modules, line -> getLog().info(line));
+                    multiModuleProjectDirectory, currentModule, modules, options,
+                    line -> getLog().info(line),
+                    line -> { if (verbose) getLog().info(line); else getLog().debug(line); });
         } catch (ConfigException e) {
             throw new MojoFailureException(e.getMessage(), e);
         } catch (RuntimeException e) {
@@ -164,7 +181,8 @@ public class CheckMojo extends AbstractMojo {
 
         if (violations > 0 && !reportOnly) {
             String noun = violations == 1 ? "violation" : "violations";
-            throw new MojoFailureException("byterails: " + violations + " " + noun + ", listed above; every reference is in " + relative(reportFile));
+            throw new MojoFailureException("byterails: " + violations + " " + noun + ", listed above; every reference is in " + relative(reportFile)
+                    + " and in the output of " + VERBOSE_SWITCH);
         }
     }
 

@@ -45,6 +45,10 @@ abstract class ByterailsCheckTask : DefaultTask() {
     @get:Input
     abstract val reportOnly: Property<Boolean>
 
+    /** When true, the verbose lines are printed at the lifecycle level; otherwise they go to the info level. */
+    @get:Input
+    abstract val verbose: Property<Boolean>
+
     @get:Input
     @get:Optional
     abstract val basePackage: Property<String>
@@ -96,13 +100,18 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val report = reportFile.get().asFile
         val cache = scriptCacheDir.get().asFile
         val base = basePackage.orNull
+        val showDetail = verbose.get()
         val violations = ToolRunner.run(
             toolClasspath.files, rules, dirs, report, cache, base, slices.get(), defaultRules.get(),
-            rootDir.get().asFile, currentModule, moduleSpecs,
-        ) { line -> logger.lifecycle(line) }
+            rootDir.get().asFile, currentModule, moduleSpecs, showDetail,
+            { line -> logger.lifecycle(line) },
+            { line -> if (showDetail) logger.lifecycle(line) else logger.info(line) },
+        )
         if (violations > 0 && !reportOnly.get()) {
             val noun = if (violations == 1) "violation" else "violations"
-            throw GradleException("byterails: $violations $noun, listed above; every reference is in ${relative(report)}")
+            throw GradleException(
+                "byterails: $violations $noun, listed above; every reference is in ${relative(report)} and in the output of ${ToolRunner.VERBOSE_SWITCH}",
+            )
         }
     }
 

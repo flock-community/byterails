@@ -110,6 +110,9 @@ data class Violation(
     val lines: List<Int> get() = occurrences.mapNotNull { it.line }.distinct().sorted()
 }
 
+/** The declaration a package falls under and every rule in effect for it, root rules first. */
+data class PackageRules(val declaration: DeclarationRef, val rules: List<RuleRef>)
+
 data class CheckResult(
     val violations: List<Violation>,
     val classCount: Int,
@@ -117,6 +120,8 @@ data class CheckResult(
     val warnings: List<ConfigProblem>,
     /** The module whose classes were checked, when the build has modules. */
     val module: String? = null,
+    /** The effective rules of every declared package that has a violation, for the verbose output. */
+    val packageRules: Map<String, PackageRules> = emptyMap(),
 ) {
     val isClean: Boolean get() = violations.isEmpty()
 }

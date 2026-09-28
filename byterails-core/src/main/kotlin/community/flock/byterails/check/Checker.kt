@@ -36,8 +36,15 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
             packages += cls.name.packageName
             violations += checkClass(cls)
         }
-        return CheckResult(violations.sortedWith(ORDER), classCount, packages.size, warnings, ruleSet.module)
+        val packageRules = violations.map { it.className.packageName }.distinct().sorted()
+            .mapNotNull { packageName -> resolved.declarationFor(packageName)?.let { packageName to packageRules(it) } }
+            .toMap()
+        return CheckResult(violations.sortedWith(ORDER), classCount, packages.size, warnings, ruleSet.module, packageRules)
     }
+
+    /** What a package may and may not use, rule by rule with where each was written. */
+    private fun packageRules(declaration: PackageDeclaration) =
+        PackageRules(declarationRef(declaration), resolved.effectiveRules(declaration).map { ruleRef(it.rule, it.origin) })
 
     fun checkClass(cls: AnalyzedClass): List<Violation> {
         wrongModule(cls)?.let { return listOf(it) }
