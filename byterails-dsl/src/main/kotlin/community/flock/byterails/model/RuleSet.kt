@@ -89,8 +89,20 @@ data class PackageDeclaration(
     val flat: Boolean = false,
     /** The group of the rule set this declaration came from, `default:<id>`, or null for one the user wrote. */
     val group: String? = null,
+    /** How the declaration was written, which is how a message names it. */
+    val role: DeclarationRole = DeclarationRole.PACKAGE,
+    /** For a module root: the name of the module, set by `withModules`. */
+    val module: String? = null,
 ) {
     val name: String get() = prefix.name
+
+    /** The declaration as a message names it: `pkg("com.acme.domain")`, `basePackage { }`, `slice { }` or the module's rules file. */
+    val text: String get() = when (role) {
+        DeclarationRole.PACKAGE -> "pkg(\"$name\")"
+        DeclarationRole.BASE_PACKAGE -> "basePackage { }"
+        DeclarationRole.SLICE_ROOT -> "slice { }"
+        DeclarationRole.MODULE_ROOT -> "the rules file of module \"${module ?: name}\""
+    }
 
     /** True when [other] lies in the subtree this declaration covers; for a flat declaration, only the package itself. */
     fun covers(other: Prefix): Boolean = if (flat) other == prefix else prefix.covers(other)
@@ -101,6 +113,18 @@ data class PackageDeclaration(
 
     /** True when a rule prefixed to [candidate] would point into this declaration's tree, either way round. */
     fun touches(candidate: Prefix): Boolean = candidate.covers(prefix) || covers(candidate)
+}
+
+/** The construct a [PackageDeclaration] was written with. */
+enum class DeclarationRole {
+    /** `pkg("a.b") { }`, in a rules file or a rule set. */
+    PACKAGE,
+    /** `basePackage { }`: the base package itself. */
+    BASE_PACKAGE,
+    /** The root of a slice, declared by the `slice { }` block. */
+    SLICE_ROOT,
+    /** The root of a module, declared implicitly by naming the module in the build. */
+    MODULE_ROOT,
 }
 
 /** A package a module makes available to every other module, `exported("api")` in its rules file. */
@@ -126,6 +150,8 @@ data class RuleSet(
     val exported: List<Export> = emptyList(),
     val modules: List<ModuleRoot> = emptyList(),
     val module: String? = null,
+    /** What the DSL found wrong while the rules were built, reported together with what the validator finds. */
+    val problems: List<ConfigProblem> = emptyList(),
 )
 
 /**
@@ -146,8 +172,9 @@ fun RuleSet.including(other: RuleSet, sliced: Boolean): RuleSet {
             rootRules = rootRules + roots,
             packages = packages + other.packages,
             sliceTemplate = template.copy(packages = template.packages + slicePackages),
+            problems = problems + other.problems,
         )
     } else {
-        copy(rootRules = rootRules + roots, packages = packages + other.packages + slicePackages)
+        copy(rootRules = rootRules + roots, packages = packages + other.packages + slicePackages, problems = problems + other.problems)
     }
 }

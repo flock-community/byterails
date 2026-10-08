@@ -9,10 +9,11 @@ data class EffectiveRule(val rule: Rule, val origin: PackageDeclaration?) {
 data class ExclusiveGroup(val rule: Rule, val owners: List<PackageDeclaration>) {
     val prefix: Prefix get() = rule.prefix
 
-    /** `"com.acme.orders.infra" and 2 more slices` for a grouped exclusive, or the one owner. */
+    /** `com.acme.orders.infra and 2 more slices` for a grouped exclusive, or the one owner. */
     val ownerDescription: String get() = when (owners.size) {
-        1 -> "\"${owners[0].name}\""
-        else -> "\"${owners[0].name}\" and ${owners.size - 1} more slices"
+        1 -> owners[0].name
+        2 -> "${owners[0].name} and 1 more slice"
+        else -> "${owners[0].name} and ${owners.size - 1} more slices"
     }
 }
 

@@ -42,32 +42,35 @@ data class ModuleRules(
 fun RuleSet.withModules(modules: List<ModuleRules>, current: String?): RuleSet {
     if (modules.isEmpty()) {
         if (current == null) return this
-        throw ConfigException("module \"$current\" is configured, but no modules are known to the build")
+        throw ConfigException(
+            "module \"$current\" is configured on this project, but the build knows no modules; every module project applies the plugin and names its module",
+            phase = ConfigPhase.SETTINGS,
+        )
     }
     val roots = modules.map { module -> ModuleRoot(module.name, parseModuleName(module.name)) }
     roots.groupBy { it.name }.values.filter { it.size > 1 }.forEach {
-        throw ConfigException("module \"${it[0].name}\" is configured more than once")
+        throw ConfigException("module \"${it[0].name}\" is configured more than once; a module belongs to one project", phase = ConfigPhase.SETTINGS)
     }
     roots.groupBy { it.prefix }.values.filter { it.size > 1 }.forEach {
-        throw ConfigException("modules \"${it[0].name}\" and \"${it[1].name}\" own the same package \"${it[0].prefix}\"")
+        throw ConfigException("modules \"${it[0].name}\" and \"${it[1].name}\" own the same package ${it[0].prefix}", phase = ConfigPhase.SETTINGS)
     }
     for (outer in roots) for (inner in roots) {
         if (outer !== inner && outer.prefix.covers(inner.prefix)) {
-            throw ConfigException("module \"${inner.name}\" lies inside module \"${outer.name}\"; modules are disjoint packages")
+            throw ConfigException("module \"${inner.name}\" lies inside module \"${outer.name}\"; modules are disjoint packages", phase = ConfigPhase.SETTINGS)
         }
     }
     if (current != null && roots.none { it.name == current }) {
-        throw ConfigException("module \"$current\" is not among the configured modules: ${roots.joinToString(", ") { it.name }}")
+        throw ConfigException("module \"$current\" is not among the configured modules: ${roots.joinToString(", ") { it.name }}", phase = ConfigPhase.SETTINGS)
     }
     val declarations = modules.zip(roots).flatMap { (module, root) -> expand(module, root, roots, modules) }
-    return copy(packages = packages + declarations, modules = roots, module = current)
+    return copy(packages = packages + declarations, modules = roots, module = current, problems = problems + modules.flatMap { it.rules.problems })
 }
 
 private fun parseModuleName(name: String): Prefix =
     try {
         Prefix.parse(name)
     } catch (e: IllegalArgumentException) {
-        throw ConfigException("module name ${e.message}")
+        throw ConfigException("the module name \"$name\" ${e.message}", phase = ConfigPhase.SETTINGS)
     }
 
 /** The declarations one module stands for: its root, its own packages and the packages of its slices. */
@@ -82,7 +85,8 @@ private fun expand(module: ModuleRules, root: ModuleRoot, roots: List<ModuleRoot
     val sliced = try {
         raw.withSlices(module.slices)
     } catch (e: ConfigException) {
-        throw ConfigException(e.problems.map { it.copy(message = "module \"${module.name}\": ${it.message}") })
+        // A problem the module file locates speaks for itself; one about the build settings needs the module named.
+        throw ConfigException(e.problems.map { if (it.location == null) it.copy(message = "module \"${module.name}\": ${it.message}") else it }, e.phase)
     }
     // Relative to the module: a declaration is prefixed, a rule prefix follows when it points into the
     // module's declared packages. The module root itself would cover any candidate, so it does not decide.
@@ -100,8 +104,8 @@ private fun expand(module: ModuleRules, root: ModuleRoot, roots: List<ModuleRoot
     }
     val rootRules = sliced.rootRules.map(::resolve) + exportedByOthers
     val declaredRoot = prefixed.firstOrNull { it.prefix == root.prefix }
-    val moduleRoot = declaredRoot?.copy(rules = rootRules + declaredRoot.rules.map(::resolve))
-        ?: PackageDeclaration(root.prefix, rootRules, null, null)
+    val moduleRoot = declaredRoot?.copy(rules = rootRules + declaredRoot.rules.map(::resolve), role = DeclarationRole.MODULE_ROOT, module = module.name)
+        ?: PackageDeclaration(root.prefix, rootRules, null, null, role = DeclarationRole.MODULE_ROOT, module = module.name)
     val packages = prefixed.filter { it !== declaredRoot }.map { declaration -> declaration.copy(rules = declaration.rules.map(::resolve)) }
     return listOf(moduleRoot) + packages
 }

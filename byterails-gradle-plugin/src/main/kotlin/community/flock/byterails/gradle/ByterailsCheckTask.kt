@@ -45,6 +45,10 @@ abstract class ByterailsCheckTask : DefaultTask() {
     @get:Input
     abstract val reportOnly: Property<Boolean>
 
+    /** When true, the verbose lines are printed at the lifecycle level; otherwise they go to the info level. */
+    @get:Input
+    abstract val verbose: Property<Boolean>
+
     @get:Input
     @get:Optional
     abstract val basePackage: Property<String>
@@ -84,7 +88,9 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val moduleSpecs = modules.get()
         val currentModule = module.orNull?.trim()?.takeIf { it.isNotEmpty() }
         if (rules == null && defaultRules.get().isEmpty() && moduleSpecs.isEmpty()) {
-            throw GradleException("byterails: rules file ${rulesFileConfigured.get()} does not exist and no defaultRules are set")
+            throw GradleException(
+                "byterails: the rules file ${rulesFileConfigured.get()} does not exist and no defaultRules are set; add the file or set byterails { defaultRules }",
+            )
         }
         if (currentModule == null) {
             val candidate = File(moduleRulesFileConfigured.get())
@@ -96,13 +102,25 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val report = reportFile.get().asFile
         val cache = scriptCacheDir.get().asFile
         val base = basePackage.orNull
+        val showDetail = verbose.get()
         val violations = ToolRunner.run(
             toolClasspath.files, rules, dirs, report, cache, base, slices.get(), defaultRules.get(),
-            rootDir.get().asFile, currentModule, moduleSpecs,
-        ) { line -> logger.lifecycle(line) }
+            rootDir.get().asFile, currentModule, moduleSpecs, showDetail,
+            { line -> logger.lifecycle(line) },
+            { line -> if (showDetail) logger.lifecycle(line) else logger.info(line) },
+        )
         if (violations > 0 && !reportOnly.get()) {
             val noun = if (violations == 1) "violation" else "violations"
-            throw GradleException("byterails found $violations $noun; see the lines above or $report")
+            throw GradleException(
+                "byterails: $violations $noun, listed above; every reference is in ${relative(report)} and in the output of ${ToolRunner.VERBOSE_SWITCH}",
+            )
         }
+    }
+
+    /** The report as a developer names it: relative to the project directory when it lies inside it. */
+    private fun relative(file: File): String {
+        val projectDir = File(moduleRulesFileConfigured.get()).absoluteFile.parentFile ?: return file.path
+        val relative = file.absoluteFile.relativeToOrNull(projectDir)?.invariantSeparatorsPath ?: return file.path
+        return if (relative.startsWith("..")) file.path else relative
     }
 }

@@ -3,6 +3,11 @@ package community.flock.byterails
 import community.flock.byterails.analysis.AnalyzedClass
 import community.flock.byterails.analysis.Reference
 import community.flock.byterails.analysis.Site
+import community.flock.byterails.analysis.ClassDirScanner
+import community.flock.byterails.analysis.UnreadableClassFile
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.assertFailsWith
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -110,5 +115,16 @@ class ClassFileAnalyzerTest {
         val generated = Fixtures.analyze("fixtures.app.application.GeneratedThing")
         assertTrue(generated.isGenerated)
         assertFalse(controller.isGenerated)
+    }
+
+    @Test
+    fun `a class file that cannot be read names the file and the JDK it was compiled for`() {
+        val dir = Files.createTempDirectory("byterails-unreadable").toFile()
+        val newer = File(dir, "Newer.class").apply { writeBytes(byteArrayOf(0xCA.toByte(), 0xFE.toByte(), 0xBA.toByte(), 0xBE.toByte(), 0, 0, 0, 90)) }
+        val tooNew = assertFailsWith<UnreadableClassFile> { ClassDirScanner.scan(listOf(dir)).toList() }
+        assertEquals("class file ${newer.path} was compiled for JDK 46 (class file version 90), which this release of byterails cannot read; upgrade byterails", tooNew.message)
+        newer.writeBytes(byteArrayOf(1, 2, 3))
+        val garbage = assertFailsWith<UnreadableClassFile> { ClassDirScanner.scan(listOf(dir)).toList() }
+        assertTrue(garbage.message!!.startsWith("cannot read class file ${newer.path}: "), garbage.message)
     }
 }

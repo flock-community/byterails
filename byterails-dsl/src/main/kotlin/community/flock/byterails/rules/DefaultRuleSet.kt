@@ -2,6 +2,7 @@ package community.flock.byterails.rules
 
 import community.flock.byterails.dsl.ByterailsBuilder
 import community.flock.byterails.model.ConfigException
+import community.flock.byterails.model.ConfigPhase
 import community.flock.byterails.model.Rule
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.including
@@ -45,6 +46,7 @@ abstract class DefaultRuleSet(
      */
     fun build(): RuleSet {
         val ruleSet = ByterailsBuilder(group).apply { rules() }.build()
+        check(ruleSet.problems.isEmpty()) { "default rule set $id: ${ruleSet.problems.joinToString("; ")}" }
         val template = ruleSet.sliceTemplate
         check(template == null || (template.rules.isEmpty() && template.exported.isEmpty() && template.naming == null)) {
             "default rule set $id: slice { } of a rule set declares packages only"
@@ -68,11 +70,32 @@ abstract class DefaultRuleSet(
                 .distinct()
         }
 
-        fun byId(id: String): DefaultRuleSet = all.firstOrNull { it.id == id.trim() }
-            ?: throw ConfigException(
-                "unknown default rule set \"$id\"; known: " +
-                    all.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.id }.let { it ?: "none, is byterails-rules on the classpath?" },
-            )
+        fun byId(id: String): DefaultRuleSet {
+            val name = id.trim()
+            all.firstOrNull { it.id == name }?.let { return it }
+            val hint = if (all.isEmpty()) {
+                "; is byterails-rules on the classpath?"
+            } else {
+                val close = all.firstOrNull { it.id.equals(name, ignoreCase = true) || distance(it.id.lowercase(), name.lowercase()) <= 2 }
+                "; the known sets are ${all.joinToString(", ") { it.id }}" + (close?.let { "; did you mean \"${it.id}\"?" } ?: "")
+            }
+            throw ConfigException("\"$name\" is not a default rule set$hint", phase = ConfigPhase.SETTINGS)
+        }
+
+        /** The edit distance between two ids, for the did-you-mean. */
+        private fun distance(a: String, b: String): Int {
+            var previous = IntArray(b.length + 1) { it }
+            for (i in 1..a.length) {
+                val current = IntArray(b.length + 1)
+                current[0] = i
+                for (j in 1..b.length) {
+                    val substitution = previous[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1
+                    current[j] = minOf(previous[j] + 1, current[j - 1] + 1, substitution)
+                }
+                previous = current
+            }
+            return previous[b.length]
+        }
 
         /** The rule set a rule came from, or null for a rule the user wrote. */
         fun of(rule: Rule): DefaultRuleSet? =

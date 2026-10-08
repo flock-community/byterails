@@ -61,6 +61,15 @@ abstract class ByterailsExtension {
     abstract val reportOnly: Property<Boolean>
 
     /**
+     * When true, the check also prints every reference on a line of its own, with the fully qualified
+     * names and the JVM descriptor as they stand in the class file, the settings of the run and the rules
+     * in effect for every package with a violation. Defaults to the Gradle property `byterails.verbose`,
+     * so `-Pbyterails.verbose=true` works without editing the build. The same lines are logged at the
+     * info level on every run, so `--info` shows them too.
+     */
+    abstract val verbose: Property<Boolean>
+
+    /**
      * The byterails core and its dependencies, loaded in a class loader of their own so that neither
      * Gradle's nor the build's Kotlin version interferes. Defaults to the `byterails` configuration,
      * which resolves the core matching this plugin's version.

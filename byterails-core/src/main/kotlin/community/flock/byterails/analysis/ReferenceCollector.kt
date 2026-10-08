@@ -29,6 +29,8 @@ object ClassFileAnalyzer {
 
     private const val ASM = Opcodes.ASM9
 
+    private const val KOTLIN_METADATA = "Lkotlin/Metadata;"
+
     fun analyze(bytes: ByteArray): AnalyzedClass {
         val collector = Collector()
         ClassReader(bytes).accept(collector, ClassReader.SKIP_FRAMES)
@@ -41,8 +43,17 @@ object ClassFileAnalyzer {
         private var access = 0
         private val annotations = mutableListOf<ClassName>()
         private val references = LinkedHashSet<Reference>()
+        private var enclosingClass: ClassName? = null
+        private var enclosingMethod: String? = null
+        private var kotlinKind: Int? = null
+        private val recordComponents = LinkedHashMap<String, String>()
+        private val fieldNames = LinkedHashSet<String>()
+        private val syntheticMembers = LinkedHashSet<Site>()
 
-        fun result() = AnalyzedClass(className, sourceFile, access, annotations.toList(), references.toList())
+        fun result() = AnalyzedClass(
+            className, sourceFile, access, annotations.toList(), references.toList(),
+            enclosingClass, enclosingMethod, kotlinKind, recordComponents.toMap(), fieldNames.toSet(), syntheticMembers.toSet(),
+        )
 
         override fun visit(version: Int, access: Int, name: String, signature: String?, superName: String?, interfaces: Array<String>?) {
             className = ClassName(name)
@@ -59,7 +70,15 @@ object ClassFileAnalyzer {
 
         override fun visitAnnotation(descriptor: String, visible: Boolean): AnnotationVisitor {
             annotations += ClassName(Type.getType(descriptor).internalName)
-            return annotationVisitor(descriptor, Site.ClassHeader, null)
+            val visitor = annotationVisitor(descriptor, Site.ClassHeader, null)
+            if (descriptor != KOTLIN_METADATA) return visitor
+            // The metadata's kind says whether Kotlin generated the class; the rest of the annotation is read for references as usual.
+            return object : AnnotationVisitor(ASM, visitor) {
+                override fun visit(name: String?, value: Any) {
+                    if (name == "k" && value is Int) kotlinKind = value
+                    super.visit(name, value)
+                }
+            }
         }
 
         override fun visitTypeAnnotation(typeRef: Int, typePath: TypePath?, descriptor: String, visible: Boolean): AnnotationVisitor =
@@ -70,6 +89,7 @@ object ClassFileAnalyzer {
         }
 
         override fun visitRecordComponent(name: String, descriptor: String, signature: String?): RecordComponentVisitor {
+            recordComponents[name] = descriptor
             val site = Site.Field(name)
             addDescriptor(descriptor, site, null)
             addSignature(signature, site, null, typeOnly = true)
@@ -82,6 +102,8 @@ object ClassFileAnalyzer {
 
         override fun visitField(access: Int, name: String, descriptor: String, signature: String?, value: Any?): FieldVisitor {
             val site = Site.Field(name)
+            fieldNames += name
+            if (access and Opcodes.ACC_SYNTHETIC != 0) syntheticMembers += site
             addDescriptor(descriptor, site, null)
             addSignature(signature, site, null, typeOnly = true)
             return object : FieldVisitor(ASM) {
@@ -93,15 +115,19 @@ object ClassFileAnalyzer {
 
         override fun visitMethod(access: Int, name: String, descriptor: String, signature: String?, exceptions: Array<String>?): MethodVisitor {
             val site = Site.Method(name, descriptor)
+            if (access and (Opcodes.ACC_SYNTHETIC or Opcodes.ACC_BRIDGE) != 0) syntheticMembers += site
             addDescriptor(descriptor, site, null)
             addSignature(signature, site, null, typeOnly = false)
             exceptions?.forEach { addInternalName(it, site, null) }
             return MethodCollector(site)
         }
 
-        // Nesting attributes describe structure, not use.
+        // Nesting attributes describe structure, not use; the enclosing method says where a lambda or anonymous class was written.
         override fun visitInnerClass(name: String, outerName: String?, innerName: String?, access: Int) = Unit
-        override fun visitOuterClass(owner: String, name: String?, descriptor: String?) = Unit
+        override fun visitOuterClass(owner: String, name: String?, descriptor: String?) {
+            enclosingClass = ClassName(owner)
+            enclosingMethod = name
+        }
         override fun visitNestHost(nestHost: String) = Unit
         override fun visitNestMember(nestMember: String) = Unit
         override fun visitAttribute(attribute: Attribute?) = Unit

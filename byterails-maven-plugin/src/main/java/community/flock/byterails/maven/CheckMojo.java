@@ -16,6 +16,8 @@ import org.codehaus.plexus.util.xml.Xpp3Dom;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -35,6 +37,11 @@ import java.util.Map;
 public class CheckMojo extends AbstractMojo {
 
     static final String PLUGIN_KEY = "community.flock.byterails:byterails-maven-plugin";
+
+    /** How a Maven build turns verbose output on, named in the lines that say what was left out. */
+    static final String VERBOSE_SWITCH = "-Dbyterails.verbose=true";
+
+    static final String ISSUES = "https://github.com/flock-community/byterails/issues";
 
     /** The rules file. Defaults to {@code byterails.kts} in the multi-module root directory. */
     @Parameter(property = "byterails.rulesFile", defaultValue = "${maven.multiModuleProjectDirectory}/byterails.kts")
@@ -92,6 +99,15 @@ public class CheckMojo extends AbstractMojo {
     @Parameter(property = "byterails.skip", defaultValue = "false")
     private boolean skip;
 
+    /**
+     * When true, the check also prints every reference on a line of its own, with the fully qualified names
+     * and the JVM descriptor as they stand in the class file, the settings of the run and the rules in effect
+     * for every package with a violation. The same lines are logged at the debug level on every run, so
+     * {@code -X} shows them too.
+     */
+    @Parameter(property = "byterails.verbose", defaultValue = "false")
+    private boolean verbose;
+
     /** Where the JSON report is written. */
     @Parameter(defaultValue = "${project.build.directory}/byterails/violations.json")
     private File reportFile;
@@ -130,7 +146,7 @@ public class CheckMojo extends AbstractMojo {
         List<Map<String, Object>> modules = modules(currentModule);
         boolean hasDefaults = defaultRules != null && !defaultRules.isEmpty();
         if (!rulesFile.isFile() && !hasDefaults && modules.isEmpty()) {
-            throw new MojoFailureException("byterails: rules file " + rulesFile + " does not exist and no defaultRules are set");
+            throw new MojoFailureException("byterails: the rules file " + rulesFile + " does not exist and no defaultRules are set; add the file or set <defaultRules>");
         }
         if (currentModule == null && moduleRulesFile != null && moduleRulesFile.isFile() && !sameFile(moduleRulesFile, rulesFile)) {
             throw new MojoFailureException("byterails: " + moduleRulesFile + " is a module rules file, but the module sets no <module> name");
@@ -151,21 +167,41 @@ public class CheckMojo extends AbstractMojo {
         Thread.currentThread().setContextClassLoader(CheckMojo.class.getClassLoader());
         int violations;
         try {
+            Map<String, Object> options = new LinkedHashMap<>();
+            options.put(ByterailsRunner.VERBOSE_SWITCH, VERBOSE_SWITCH);
+            options.put(ByterailsRunner.VERBOSE, verbose);
             violations = ByterailsRunner.run(
                     rules, List.of(classesDirectory), reportFile, scriptCacheDir, basePackage, rootSlices, rootDefaultRules,
-                    multiModuleProjectDirectory, currentModule, modules, line -> getLog().info(line));
+                    multiModuleProjectDirectory, currentModule, modules, options,
+                    line -> getLog().info(line),
+                    line -> { if (verbose) getLog().info(line); else getLog().debug(line); });
         } catch (ConfigException e) {
             throw new MojoFailureException(e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new MojoExecutionException("byterails failed: " + e, e);
+            // A bug or an unreadable class file: the trace goes where the verbose lines go.
+            StringWriter trace = new StringWriter();
+            e.printStackTrace(new PrintWriter(trace));
+            if (verbose) getLog().info(trace.toString()); else getLog().debug(trace.toString());
+            String message = e.getMessage() == null ? e.toString() : e.getMessage();
+            throw new MojoExecutionException("byterails: internal error: " + message + "; run with -e or " + VERBOSE_SWITCH
+                    + " for the stack trace, and please report it at " + ISSUES, e);
         } finally {
             Thread.currentThread().setContextClassLoader(previous);
         }
 
         if (violations > 0 && !reportOnly) {
             String noun = violations == 1 ? "violation" : "violations";
-            throw new MojoFailureException("byterails found " + violations + " " + noun + "; see the lines above or " + reportFile);
+            throw new MojoFailureException("byterails: " + violations + " " + noun + ", listed above; every reference is in " + relative(reportFile)
+                    + " and in the output of " + VERBOSE_SWITCH);
         }
+    }
+
+    /** The report as a developer names it: relative to the module directory when it lies inside it. */
+    private String relative(File file) {
+        File base = project == null ? null : project.getBasedir();
+        if (base == null) return file.getPath();
+        String path = base.toPath().toAbsolutePath().relativize(file.toPath().toAbsolutePath()).toString().replace(File.separatorChar, '/');
+        return path.startsWith("..") ? file.getPath() : path;
     }
 
     /**

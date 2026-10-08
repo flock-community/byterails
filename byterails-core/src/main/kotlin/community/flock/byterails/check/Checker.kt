@@ -1,25 +1,25 @@
 package community.flock.byterails.check
 
 import community.flock.byterails.analysis.AnalyzedClass
-import community.flock.byterails.analysis.Reference
-import community.flock.byterails.analysis.Site
 import community.flock.byterails.model.ClassName
 import community.flock.byterails.model.ConfigProblem
-import community.flock.byterails.rules.DefaultRuleSet
 import community.flock.byterails.model.EffectiveRule
+import community.flock.byterails.model.ExclusiveGroup
 import community.flock.byterails.model.PackageDeclaration
 import community.flock.byterails.model.Prefix
 import community.flock.byterails.model.ResolvedRuleSet
 import community.flock.byterails.model.Rule
 import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
+import community.flock.byterails.rules.DefaultRuleSet
 
 /**
  * Evaluates analysed classes against a rule set.
  *
  * For every reference from a class in package P to a type T the order is: T inside P's own
  * declaration, T exclusive to another package, a deny in P's effective rules, an allow in P's
- * effective rules, otherwise not allowed.
+ * effective rules, otherwise not allowed. Every place a class refers to T is one occurrence of the
+ * same violation.
  */
 class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigProblem> = emptyList()) {
 
@@ -36,72 +36,103 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
             packages += cls.name.packageName
             violations += checkClass(cls)
         }
-        return CheckResult(violations.sortedWith(ORDER), classCount, packages.size, warnings, ruleSet.module)
+        val packageRules = violations.map { it.className.packageName }.distinct().sorted()
+            .mapNotNull { packageName -> resolved.declarationFor(packageName)?.let { packageName to packageRules(it) } }
+            .toMap()
+        return CheckResult(violations.sortedWith(ORDER), classCount, packages.size, warnings, ruleSet.module, packageRules)
     }
+
+    /** What a package may and may not use, rule by rule with where each was written. */
+    private fun packageRules(declaration: PackageDeclaration) =
+        PackageRules(declarationRef(declaration), resolved.effectiveRules(declaration).map { ruleRef(it.rule, it.origin) })
 
     fun checkClass(cls: AnalyzedClass): List<Violation> {
         wrongModule(cls)?.let { return listOf(it) }
         val declaration = resolved.declarationFor(cls.name.packageName)
             ?: return listOf(undeclared(cls))
-        val found = LinkedHashMap<Any, Violation>()
-        naming(cls, declaration)?.let { found[it.kind] = it }
+        val owner = ownerOf(cls)
+        val violations = mutableListOf<Violation>()
+        naming(cls, declaration, owner)?.let { violations += it }
         val rules = resolved.effectiveRules(declaration)
+        val decisions = LinkedHashMap<ClassName, Decision?>()
+        val occurrences = HashMap<ClassName, MutableList<Occurrence>>()
         for (reference in cls.references) {
-            val violation = evaluate(cls, declaration, rules, reference) ?: continue
-            found.putIfAbsent(Triple(violation.kind, violation.target, violation.site), violation)
+            val target = reference.target
+            val decision = if (target in decisions) decisions[target] else evaluate(declaration, rules, target).also { decisions[target] = it }
+            if (decision == null) continue
+            occurrences.getOrPut(target) { mutableListOf() } += Occurrence(reference.site, reference.line, MemberNames.member(cls, reference.site))
         }
-        return found.values.toList()
+        for ((target, decision) in decisions) {
+            if (decision != null) violations += violation(cls, owner, declaration, target, decision, occurrences.getValue(target))
+        }
+        return violations
     }
 
-    private fun evaluate(cls: AnalyzedClass, declaration: PackageDeclaration, rules: List<EffectiveRule>, reference: Reference): Violation? {
-        val target = reference.target
+    /** What the rules say about a reference to [target] from a class under [declaration]; null when it is fine. */
+    private fun evaluate(declaration: PackageDeclaration, rules: List<EffectiveRule>, target: ClassName): Decision? {
         if (declaration.covers(target)) return null
-
         resolved.exclusiveGroups.firstOrNull { it.prefix.covers(target) && !resolved.isInside(declaration, it) }
-            ?.let { group ->
-                return Violation(
-                    ViolationKind.EXCLUSIVE, cls.name, reference.site, reference.line, target,
-                    RuleRef(group.rule.text, group.owners[0].name, group.rule.location), emptyList(), cls.sourceFile,
-                    "${cls.name} references $target, which ${group.ownerDescription} owns through ${group.rule.text}",
-                )
-            }
-
+            ?.let { return Decision.Exclusive(it) }
         rules.firstOrNull { it.rule.kind == RuleKind.DENY && it.rule.prefix.covers(target) }
-            ?.let { deny ->
-                return violation(ViolationKind.DENIED, cls, reference, deny, "${cls.name} references $target, denied by ${deny.rule.text}")
-            }
-
+            ?.let { return Decision.Denied(it) }
         if (rules.any { it.rule.kind != RuleKind.DENY && it.rule.prefix.covers(target) }) return null
-
         val granted = rules.filter { it.rule.kind != RuleKind.DENY }
         val sets = granted.mapNotNull { DefaultRuleSet.of(it.rule) }.distinct()
         val allows = granted
             .map { effective -> DefaultRuleSet.of(effective.rule)?.let { "[${it.id}]" } ?: effective.rule.prefix.name }
             .distinct()
             .sorted()
-        val hints = listOfNotNull(
-            HINTS.firstOrNull { (prefix, _) -> prefix.covers(target) }?.second,
-            sets.takeIf { it.isNotEmpty() }?.joinToString("; ") { "[${it.id}] is ${it.allowsLabel}" },
-        )
-        return Violation(
-            ViolationKind.NOT_ALLOWED, cls.name, reference.site, reference.line, target, null, allows, cls.sourceFile,
-            "${cls.name} references $target, which \"${declaration.name}\" is not allowed to use",
-            hint = hints.takeIf { it.isNotEmpty() }?.joinToString(" "),
-        )
+        return Decision.NotAllowed(allows, sets.associate { it.id to it.allowsLabel }, HINTS.firstOrNull { (prefix, _) -> prefix.covers(target) }?.second)
     }
 
-    private fun violation(kind: ViolationKind, cls: AnalyzedClass, reference: Reference, decided: EffectiveRule, message: String) =
-        Violation(kind, cls.name, reference.site, reference.line, reference.target, ruleRef(decided.rule, decided.origin), emptyList(), cls.sourceFile, message)
+    /** The class a lambda or anonymous class is reported under, or null for a class reported under its own name. */
+    private fun ownerOf(cls: AnalyzedClass): ClassName? = MemberNames.owner(cls).takeIf { it != cls.name }
 
-    private fun naming(cls: AnalyzedClass, declaration: PackageDeclaration): Violation? {
+    private fun violation(
+        cls: AnalyzedClass,
+        owner: ClassName?,
+        declaration: PackageDeclaration,
+        target: ClassName,
+        decision: Decision,
+        occurrences: List<Occurrence>,
+    ): Violation {
+        val declared = declarationRef(declaration)
+        return when (decision) {
+            is Decision.Exclusive -> {
+                val group = decision.group
+                val texts = Messages.exclusive(cls.name, target, group.ownerDescription, group.owners[0].name, declared)
+                Violation(
+                    ViolationKind.EXCLUSIVE, cls.name, target, ruleRef(group.rule, group.owners[0]), occurrences, emptyList(), declared, null,
+                    cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner,
+                )
+            }
+            is Decision.Denied -> {
+                val rule = ruleRef(decision.rule.rule, decision.rule.origin)
+                val texts = Messages.denied(cls.name, target, rule)
+                Violation(
+                    ViolationKind.DENIED, cls.name, target, rule, occurrences, emptyList(), declared, null,
+                    cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner,
+                )
+            }
+            is Decision.NotAllowed -> {
+                val texts = Messages.notAllowed(cls.name, target, declared)
+                Violation(
+                    ViolationKind.NOT_ALLOWED, cls.name, target, null, occurrences, decision.allows, declared, null,
+                    cls.sourceFile, texts.message, texts.headline, texts.fix, decision.hint, decision.ruleSets, owner,
+                )
+            }
+        }
+    }
+
+    private fun naming(cls: AnalyzedClass, declaration: PackageDeclaration, owner: ClassName?): Violation? {
         if (!isNamingCandidate(cls)) return null
-        val (owner, naming) = resolved.namingFor(declaration) ?: return null
+        val (holder, naming) = resolved.namingFor(declaration) ?: return null
         if (naming.patterns.any { it.matches(cls.name.simpleName) }) return null
-        val tried = naming.patterns.joinToString(", ") { it.text }
+        val texts = Messages.naming(cls.name, naming.patterns)
         return Violation(
-            ViolationKind.NAMING, cls.name, null, null, null,
-            RuleRef(naming.text, owner.name, naming.location), emptyList(), cls.sourceFile,
-            "${cls.name} matches none of $tried",
+            ViolationKind.NAMING, cls.name, null,
+            RuleRef(naming.text, holder.name, naming.location, holder.text, ruleSetOf(holder)), emptyList(), emptyList(), null, null,
+            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner,
         )
     }
 
@@ -116,29 +147,43 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
      */
     private fun wrongModule(cls: AnalyzedClass): Violation? {
         if (ruleSet.modules.isEmpty()) return null
-        val owner = ruleSet.modules.firstOrNull { it.prefix.covers(cls.name) }
-        val current = currentModule
-        if (owner == current) return null
-        val detail = when {
-            owner == null -> "is compiled in module \"${current!!.name}\", which owns \"${current.prefix}\", but lies outside it"
-            current == null -> "belongs to module \"${owner.name}\", which owns \"${owner.prefix}\", but is compiled outside the modules"
-            else -> "belongs to module \"${owner.name}\", which owns \"${owner.prefix}\", but is compiled in module \"${current.name}\""
-        }
-        return Violation(ViolationKind.WRONG_MODULE, cls.name, null, null, null, null, emptyList(), cls.sourceFile, "${cls.name} $detail")
+        val ownerModule = ruleSet.modules.firstOrNull { it.prefix.covers(cls.name) }
+        if (ownerModule == currentModule) return null
+        val mismatch = ModuleMismatch(currentModule, ownerModule)
+        val texts = Messages.wrongModule(cls.name, mismatch)
+        return Violation(
+            ViolationKind.WRONG_MODULE, cls.name, null, null, emptyList(), emptyList(), null, mismatch,
+            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = ownerOf(cls),
+        )
     }
 
     private fun undeclared(cls: AnalyzedClass): Violation {
         val nearest = resolved.declarations
             .filter { cls.name.packageName.startsWith(it.name + ".") || it.prefix.coversPackage(cls.name.packageName) }
             .maxByOrNull { it.prefix.depth }
-        val hint = nearest?.let { "; the nearest declared package is \"${it.name}\"" } ?: ""
+            ?.let(::declarationRef)
+        val texts = Messages.undeclared(cls.name, nearest)
         return Violation(
-            ViolationKind.UNDECLARED_PACKAGE, cls.name, null, null, null, null, emptyList(), cls.sourceFile,
-            "package \"${cls.name.packageName.ifEmpty { "(default)" }}\" is not declared$hint",
+            ViolationKind.UNDECLARED_PACKAGE, cls.name, null, null, emptyList(), emptyList(), nearest, null,
+            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = ownerOf(cls),
         )
     }
 
-    private fun ruleRef(rule: Rule, origin: PackageDeclaration?) = RuleRef(rule.text, origin?.name, rule.location)
+    private fun ruleRef(rule: Rule, origin: PackageDeclaration?) =
+        RuleRef(rule.text, origin?.name, rule.location, origin?.text, DefaultRuleSet.of(rule)?.id)
+
+    private fun declarationRef(declaration: PackageDeclaration) =
+        DeclarationRef(declaration.name, declaration.text, declaration.location, declaration.flat, declaration.isolated, ruleSetOf(declaration))
+
+    /** The id of the rule set a declaration came from, read off its group. */
+    private fun ruleSetOf(declaration: PackageDeclaration): String? =
+        declaration.group?.takeIf { it.startsWith(DefaultRuleSet.GROUP) }?.removePrefix(DefaultRuleSet.GROUP)?.substringBefore(':')
+
+    private sealed interface Decision {
+        class Exclusive(val group: ExclusiveGroup) : Decision
+        class Denied(val rule: EffectiveRule) : Decision
+        class NotAllowed(val allows: List<String>, val ruleSets: Map<String, String>, val hint: String?) : Decision
+    }
 
     private companion object {
         /** References the compilers write into every class, which a first-time user has not thought about. */
@@ -152,16 +197,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
         val ORDER: Comparator<Violation> = compareBy<Violation> { it.className.packageName }
             .thenBy { it.className.name }
             .thenBy { it.kind.ordinal }
-            .thenBy { it.line ?: Int.MAX_VALUE }
             .thenBy { it.target?.name ?: "" }
-            .thenBy { siteKey(it.site) }
-
-        fun siteKey(site: Site?): String = when (site) {
-            null -> ""
-            Site.ClassHeader -> "0"
-            is Site.Field -> "1${site.name}"
-            is Site.Method -> "2${site.name}${site.descriptor}"
-        }
     }
 }
 

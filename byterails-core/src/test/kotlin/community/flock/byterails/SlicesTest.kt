@@ -88,6 +88,6 @@ class SlicesTest {
         assertTrue(crossSlice.allows.contains("fixtures.slices.orders.api"), crossSlice.allows.toString())
         val exclusive = slices.first { it.kind == ViolationKind.EXCLUSIVE }
         assertEquals("exclusive(\"fixtures.lib.messaging\")", exclusive.rule?.text)
-        assertTrue(exclusive.message.contains("and 1 more slices"), exclusive.message)
+        assertEquals("fixtures.slices.customers.domain.Customer uses fixtures.lib.messaging.EventBus, which only fixtures.slices.orders.infra and 1 more slice may use", exclusive.message)
     }
 }

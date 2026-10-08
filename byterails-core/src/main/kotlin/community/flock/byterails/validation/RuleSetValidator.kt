@@ -1,8 +1,9 @@
 package community.flock.byterails.validation
 
 import community.flock.byterails.model.ConfigProblem
-import community.flock.byterails.rules.DefaultRuleSet
+import community.flock.byterails.model.DeclarationRole
 import community.flock.byterails.model.EffectiveRule
+import community.flock.byterails.model.ExclusiveGroup
 import community.flock.byterails.model.PackageDeclaration
 import community.flock.byterails.model.Prefix
 import community.flock.byterails.model.ResolvedRuleSet
@@ -11,6 +12,7 @@ import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.Severity
 import community.flock.byterails.model.SourceLocation
+import community.flock.byterails.rules.DefaultRuleSet
 
 /**
  * Checks a [RuleSet] before any class file is read. Errors stop the build; warnings are printed.
@@ -21,10 +23,10 @@ object RuleSetValidator {
         val resolved = ResolvedRuleSet(ruleSet)
         val problems = mutableListOf<ConfigProblem>()
         ruleSet.sliceTemplate?.let {
-            problems += error("the rules file has a slice { } block, but no slices are configured; name them in the build", it.location)
+            problems += error("the slice { } block needs slices, but no slices are configured in the build", it.location)
         }
         ruleSet.exported.forEach {
-            problems += error("${it.text} is only meaningful in the rules file of a module; the root rules file exports nothing", it.location)
+            problems += error("${it.text} belongs in the rules file of a module; the root file cannot export", it.location)
         }
         duplicateDeclarations(resolved, problems)
         exclusiveAtRoot(ruleSet, problems)
@@ -43,10 +45,10 @@ object RuleSetValidator {
             .forEach { duplicates ->
                 val module = moduleRoots[duplicates.first().prefix]
                 if (module != null) {
-                    // The implicit module root carries no location; the declaration the user wrote does.
-                    val written = duplicates.firstOrNull { it.location != null } ?: duplicates.last()
+                    // The module root is declared implicitly; the other declaration is the one the user wrote.
+                    val written = duplicates.firstOrNull { it.role != DeclarationRole.MODULE_ROOT } ?: duplicates.last()
                     problems += error(
-                        "package \"${written.name}\" is the root of module \"${module.name}\", which is declared implicitly; " +
+                        "${written.text} is the root of module \"${module.name}\", which is declared implicitly; " +
                             "declare its sub-packages in the module's rules file instead",
                         written.location,
                     )
@@ -54,17 +56,17 @@ object RuleSetValidator {
                 }
                 val first = duplicates.first()
                 duplicates.drop(1).forEach { again ->
-                    problems += error(
-                        "package \"${again.name}\" is declared twice; the first declaration is at ${first.location ?: "an unknown location"}",
-                        again.location,
-                    )
+                    problems += error("${again.text} is declared twice; the first is at ${first.location ?: "an unknown location"}", again.location)
                 }
             }
     }
 
     private fun exclusiveAtRoot(ruleSet: RuleSet, problems: MutableList<ConfigProblem>) {
         ruleSet.rootRules.filter { it.kind == RuleKind.EXCLUSIVE }.forEach {
-            problems += error("${it.text} at the root is a plain allow; exclusive needs a package to own it", it.location)
+            problems += error(
+                "${it.text} at the top of the file has no package to own it; use allow(\"${it.prefix.name}\") or move it into a pkg block",
+                it.location,
+            )
         }
     }
 
@@ -85,8 +87,7 @@ object RuleSetValidator {
                     (bOwner.covers(aOwner.prefix) && b.rule.prefix.covers(a.rule.prefix))
                 if (narrowing) continue
                 problems += error(
-                    "${b.rule.text} in \"${bOwner.name}\" clashes with ${a.rule.text} in \"${aOwner.name}\" " +
-                        "(${a.rule.location ?: "unknown location"}); only one package can own a prefix",
+                    "${b.rule.text} in ${bOwner.text} clashes with ${a.rule.text} in ${aOwner.text}${at(a.rule.location)}; only one package can own it",
                     b.rule.location,
                 )
             }
@@ -116,22 +117,21 @@ object RuleSetValidator {
             }
         }
 
-        // An allow of something another package owns exclusively can never take effect either.
+        // An allow of something another package owns exclusively can never take effect either. One
+        // report per allow: the outermost owner, since the groups come in declaration order.
         val allAllows = rootAllows + resolved.declarations.flatMap { declaration ->
             declaration.rules.filter { it.kind == RuleKind.ALLOW }.map { EffectiveRule(it, declaration) }
         }
         for (allow in allAllows) {
             if (DefaultRuleSet.of(allow.rule) != null) continue
-            for (group in resolved.exclusiveGroups) {
-                if (!group.prefix.covers(allow.rule.prefix)) continue
-                if (resolved.isInside(allow.origin, group)) continue
-                if (!reported.add(allow.rule to group.rule)) continue
-                problems += error(
-                    "${allow.rule.text} in ${describe(allow)} can never apply: ${group.ownerDescription} owns it through " +
-                        "${group.rule.text} (${group.rule.location ?: "unknown location"})",
-                    allow.rule.location,
-                )
-            }
+            val owner = resolved.exclusiveGroups.firstOrNull { group ->
+                group.prefix.covers(allow.rule.prefix) && !resolved.isInside(allow.origin, group)
+            } ?: continue
+            if (!reported.add(allow.rule to owner.rule)) continue
+            problems += error(
+                "${allow.rule.text} in ${describe(allow)} can never apply: ${owners(owner)} owns it through ${owner.rule.text}${at(owner.rule.location)}",
+                allow.rule.location,
+            )
         }
     }
 
@@ -145,8 +145,8 @@ object RuleSetValidator {
         if (DefaultRuleSet.of(allow.rule) != null) return
         if (!reported.add(allow.rule to deny.rule)) return
         problems += error(
-            "${allow.rule.text} in ${describe(allow)} can never apply: it is shadowed by ${deny.rule.text} in " +
-                "${describe(deny)} (${deny.rule.location ?: "unknown location"}), and deny always wins",
+            "${allow.rule.text} in ${describe(allow)} can never apply: it is shadowed by ${deny.rule.text} in ${describe(deny)}${at(deny.rule.location)}, " +
+                "and deny always wins",
             allow.rule.location,
         )
     }
@@ -155,7 +155,7 @@ object RuleSetValidator {
         resolved.declarations.forEach { declaration ->
             val naming = declaration.naming ?: return@forEach
             if (naming.patterns.isEmpty()) {
-                problems += error("naming block of \"${declaration.name}\" has no patterns", naming.location)
+                problems += error("the naming block of ${declaration.text} has no patterns; add endsWith, startsWith or matches", naming.location)
             }
         }
     }
@@ -193,14 +193,23 @@ object RuleSetValidator {
                 ?: return@forEach
             problems += ConfigProblem(
                 Severity.WARNING,
-                "${rule.text}: Kotlin types under \"${mapping.key}\" compile to \"${mapping.value}\" in bytecode, " +
-                    "so this rule only matches the Kotlin standard library helper classes; add a rule for \"${mapping.value}\"",
+                "${rule.text} matches only Kotlin's own helper classes: ${mapping.key} compiles to ${mapping.value} in bytecode, " +
+                    "so add a rule for ${mapping.value} as well",
                 rule.location,
             )
         }
     }
 
-    private fun describe(rule: EffectiveRule): String = rule.origin?.let { "\"${it.name}\"" } ?: "the root block"
+    /** `pkg("com.acme.a") and 2 more slices` for a template exclusive, or the one owner. */
+    private fun owners(group: ExclusiveGroup): String = when (group.owners.size) {
+        1 -> group.owners[0].text
+        2 -> "${group.owners[0].text} and 1 more slice"
+        else -> "${group.owners[0].text} and ${group.owners.size - 1} more slices"
+    }
+
+    private fun describe(rule: EffectiveRule): String = rule.origin?.text ?: "the root block"
+
+    private fun at(location: SourceLocation?): String = location?.let { " at $it" } ?: ""
 
     private fun error(message: String, location: SourceLocation?) = ConfigProblem(Severity.ERROR, message, location)
 

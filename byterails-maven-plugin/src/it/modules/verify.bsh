@@ -3,26 +3,24 @@ import java.nio.file.*;
 
 String log = new String(Files.readAllBytes(new File(basedir, "build.log").toPath()), "UTF-8");
 String[] expected = {
-    "byterails: WRONG MODULE com.acme.orders",
-    "  Stray  Stray.java",
-    "module   belongs to module \"orders\", which owns \"com.acme.orders\", but is compiled outside the modules",
-    "byterails: NOT ALLOWED  com.acme.customers.domain -> com.acme.orders.domain",
-    "Customer.order  Order  Customer.java",
-    "allows   com.acme.orders.api, java.lang",
-    "byterails: EXCLUSIVE    com.acme.customers.domain -> java.util",
-    "orders/byterails.kts:7  in \"com.acme.orders.domain\"",
-    "byterails: WRONG MODULE com.acme.shared",
-    "  Misplaced  Misplaced.java",
-    "module   is compiled in module \"customers\", which owns \"com.acme.customers\", but lies outside it",
+    "byterails: WRONG MODULE com.acme.orders belongs to module \"orders\", which owns com.acme.orders, but is compiled outside the modules",
+    "  Stray.java  Stray",
+    "byterails: NOT ALLOWED  com.acme.customers.domain uses com.acme.orders.domain, which no rule allows",
+    "Customer.java  Customer uses Order in order",
+    "may use  com.acme.orders.api, java.lang",
+    "byterails: EXCLUSIVE    com.acme.customers.domain uses java.util, which only com.acme.orders.domain may use",
+    "rule     exclusive(\"java.util\") in pkg(\"com.acme.orders.domain\") at orders/byterails.kts:7",
+    "byterails: WRONG MODULE com.acme.shared is compiled in module \"customers\" but lies outside its package com.acme.customers",
+    "  Misplaced.java  Misplaced",
     "byterails: 0 violations in 2 classes, 2 packages",
-    "byterails: 0 violations in 1 classes, 1 packages"
+    "byterails: 0 violations in 1 class, 1 package"
 };
 for (String line : expected) {
     if (log.indexOf(line) < 0) {
         throw new RuntimeException("build.log is missing: " + line);
     }
 }
-if (log.indexOf("Customer.api") >= 0) {
+if (log.indexOf("uses OrderApi") >= 0) {
     throw new RuntimeException("the exported api package must be allowed");
 }
 if (!new File(basedir, "customers/target/byterails/violations.json").isFile()) {
