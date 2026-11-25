@@ -19,8 +19,10 @@ the rule sets described under [Default rules](#default-rules), `byterails-gradle
 plugin id `community.flock.byterails`, and `byterails-maven-plugin`. Both plugins put the core and the
 default rules on the tool classpath. A project that uses the library directly depends on
 `byterails-core`, which brings the DSL with it, and on `byterails-rules` when it applies a default rule
-set; a rule set of its own needs `byterails-dsl` only. The Gradle plugin is resolved from Maven Central
-rather than the plugin portal, so add it to the plugin repositories once:
+set; a rule set of its own needs `byterails-dsl` only. Everything is compiled for Java 17, so the build
+that runs the check needs JDK 17 or newer; the class files it reads may target another version.
+The Gradle plugin is resolved from Maven Central rather than the plugin portal, so add it to the plugin
+repositories once:
 
 ```kotlin
 // settings.gradle.kts
@@ -111,11 +113,12 @@ byterails {
 | `pkg("a.b")` | The package `a.b` and its sub-packages may exist. A class in a package no declaration covers is a violation. The subtree may always reference itself. |
 | `allow("x.y")` | Classes in this subtree may reference anything under `x.y`. Local to the subtree; says nothing about other packages. |
 | `deny("x.y")` | Classes in this subtree may not reference anything under `x.y`. Deny wins over allow, whatever the prefix length and wherever it was declared. |
-| `exclusive("x.y")` | An allow for this subtree plus a deny for every other declared package. Two packages claiming overlapping prefixes is an error at load time. |
-| Inheritance | A package's effective rules are its own plus those of every enclosing declaration and the root block. A child may add allows and may deny what it inherited. |
-| Matching | Prefixes match on dot boundaries: `com.acme.domain` covers `com.acme.domain.model`, not `com.acme.domainservice`. A prefix may name a class: `deny("java.lang.System")`. |
-| `naming { }` | Patterns (`endsWith`, `startsWith`, `matches`) on the simple class name. A class passes when one pattern matches. Nested and generated classes are skipped. |
-| `flat()` | The package itself only: a class in a sub-package is undeclared unless another declaration covers it, and such a declaration inherits nothing from the flat one. |
+| `exclusive("x.y")` | An allow for this subtree plus a deny for every other declared package. It belongs in a `pkg` block; at the top of the file it is an error, since no package would own it. Two packages claiming overlapping prefixes is an error at load time, unless one lies inside the other and claims part of what the outer one owns. |
+| Inheritance | A package's effective rules are its own plus those of every enclosing declaration and the root block. A child may add allows and may deny what it inherited. `isolated()` and `flat()` cut the chain, as described below. |
+| Matching | Prefixes match on dot boundaries: `com.acme.domain` covers `com.acme.domain.model`, not `com.acme.domainservice`. A prefix may name a class: `deny("java.lang.System")` covers that class and its nested classes. |
+| `naming { }` | Patterns on the simple class name: `endsWith("x")`, `startsWith("x")` and `matches("regex")`, where the regular expression must match the whole name. A class passes when one pattern matches. A declaration takes one naming block, and a package without one uses that of the nearest enclosing declaration. Nested classes, compiler-generated classes, `package-info` and classes carrying an annotation named `Generated` that is kept in the class file are skipped. |
+| `isolated()` | Inherit nothing, not even the root block: classes in this subtree may reference only what the block itself lists, and the subtree. |
+| `flat()` | The package itself only: a class in a sub-package is undeclared unless another declaration covers it, and such a declaration inherits neither rules nor naming from the flat one. |
 | `basePackage { }` | The base package itself, as configured in the build; usually `flat()`, so it holds the entry point and its siblings stay separate subtrees. |
 | `allowAnything()` | Classes in this subtree may reference anything at all, short of what the root block denies and what another package owns. For the entry point and the wiring. |
 
@@ -123,10 +126,13 @@ Every reference from a class in package P to a type T is decided in this order: 
 declaration, T exclusive to another package, a deny in P's effective rules, an allow in P's effective
 rules, otherwise not allowed. The last branch is what makes byterails a whitelist.
 
-The file is validated before any class file is read. Duplicate declarations, clashing exclusives,
-allows that can never apply, and malformed prefixes fail the build, every problem of the file in one
-run, each with the line it is on. Cycles between declared packages and Kotlin package names that
-compile to Java ones are warnings.
+A rules file calls `byterails { }` once. The file is validated before any class file is read. Duplicate
+declarations, clashing exclusives, an exclusive at the top of the file, allows that can never apply
+because a deny or another package's exclusive covers them, malformed prefixes, a naming block that is
+empty, repeated or holds an invalid regular expression, and a second `slice { }` block fail the build,
+every problem of the file in one run, each with the line it is on. Cycles between declared packages and
+rules on Kotlin names that compile to Java ones, such as `kotlin.collections`, are warnings: they are
+printed as `byterails: warning: ...` and counted in the summary line, and the check goes on.
 
 ```
 byterails: 2 problems in byterails.kts
@@ -182,13 +188,19 @@ byterails {
 
 Maven takes the same as `<slices><slice>orders</slice>...</slices>` or `-Dbyterails.slices=orders,customers`.
 Slice names are packages relative to the base package. The template expands into
-`com.acme.orders`, `com.acme.orders.domain` and so on for each slice. Template rules are relative to
+`com.acme.orders`, `com.acme.orders.domain` and so on for each slice. The slice root is a declaration
+of its own that covers the whole slice, so a class in a package of the slice the template does not
+name gets the rules of the slice root. Next to `exported` and `pkg`, the block takes `allow`, `deny`,
+`exclusive` and `naming` for the slice root, where an exclusive is owned by the roots of all slices
+together. Template rules are relative to
 the slice: `allow("domain")` in `orders` means `com.acme.orders.domain`, while a prefix that points
 outside the template, such as `org.slf4j`, is taken as written. Slices cannot see each other, because
 nothing allows them to, except through exported packages. An exclusive in the template is owned by
 that package of every slice together, so the slices' copies never clash and the library stays denied
 outside the slices. A rules file with a `slice { }` block and no configured slices fails to load, and
-so does a build that names slices for a file without one, so the two sides cannot drift apart.
+so does a build that names slices for a file without one, so the two sides cannot drift apart. The
+exception is a build that also applies [default rules](#default-rules): they bring the slice template
+with them, so the file needs no block of its own.
 
 ## Modules
 
@@ -210,6 +222,11 @@ byterails {
 
 ```kotlin
 // orders/build.gradle.kts
+plugins {
+    `java-library`                  // or Kotlin's plugin: the check reads the main classes
+    id("community.flock.byterails")
+}
+
 byterails {
     module.set("orders")            // this project's classes live in com.acme.orders
 }
@@ -245,11 +262,12 @@ in one module is enforced in all of them, a cycle between modules is found, and 
 everywhere. Which modules exist is read from the build: in Gradle every project that applies the plugin
 and sets `module`, in Maven every module of the reactor whose POM configures `<module>` on this plugin,
 so a `-pl` selection still sees all of them. A module without a rules file has the root rules and its
-default rules only. A `byterails.kts` next to a build file that sets no module name fails the build, so
-a module cannot silently lose its rules. On a module project, `slices` and `defaultRules` belong to the
+default rules only; `moduleRulesFile` points the module at a file elsewhere. A `byterails.kts` next to
+a build file that sets no module name fails the build, so a module cannot silently lose its rules. On a module project, `slices` and `defaultRules` belong to the
 module; the root project's own settings go with the root file, which may be absent once there are
 modules. `basePackage { }` is not allowed in a module file, since the module root is declared implicitly.
-A violation names a module file by its path from the root, `orders/byterails.kts:7`.
+A violation names a module file by its path from the root, `orders/byterails.kts:7`. Modules are a
+feature of the two plugins; the command line checks against one rules file.
 
 ```
 byterails: WRONG MODULE com.acme.shared is compiled in module "customers" but lies outside its package com.acme.customers
@@ -304,15 +322,19 @@ object Hexagonal : DefaultRuleSet(
 
 Top-level declarations of a set are relative to the base package, and its `slice { }` block holds
 what every slice gets: with slices configured it joins the slice template, without it goes under the
-base package. The core finds the sets through a service-loader provider, so a rule set of your own is
-a class like the one above, listed by a `DefaultRuleSetProvider` in `META-INF/services`.
+base package. The `slice { }` block of a set declares packages only, because without slices there is
+no slice root to hold anything else. The core finds the sets through a service-loader provider, so a
+rule set of your own is a class like the one above, listed by a `DefaultRuleSetProvider` that is
+registered in `META-INF/services/community.flock.byterails.rules.DefaultRuleSetProvider`, in a jar on
+the tool classpath: `byterails { toolClasspath.from(...) }` in Gradle, a dependency of the plugin in
+Maven.
 
 ### The rule sets
 
 | Id | What it declares | What it catches |
 | --- | --- | --- |
-| `java` | The Java standard library, allowed in every package: the whole `java` namespace, the `javax` and `com.sun` packages the JDK itself exports, the `jdk` namespace, and the W3C DOM, SAX and JGSS packages. Not `javax` as a whole, because `javax.persistence`, `javax.inject` and friends are libraries, not the JDK. | Nothing by itself; it is the grant every Java project needs, so the rules file only has to say what is specific to the application. |
-| `kotlin` | The Kotlin standard library, allowed in every package: `kotlin`, the `org.jetbrains.annotations` the compiler writes into every class, and everything in `java`, because Kotlin's collections, strings and boxed numbers compile to `java.util` and `java.lang`. | Nothing by itself; a Kotlin project needs no other root allows. |
+| `java` | The Java standard library, allowed in every package: the whole `java` namespace, the `javax` and `com.sun` packages JDK 21 itself exports, the `jdk` namespace, `netscape.javascript`, and the W3C DOM, SAX and JGSS packages. Not `javax` as a whole, because `javax.persistence`, `javax.inject` and friends are libraries, not the JDK. | Nothing by itself; it is the grant every Java project needs, so the rules file only has to say what is specific to the application. |
+| `kotlin` | The Kotlin standard library, allowed in every package: `kotlin`, the `org.jetbrains.annotations` the compiler writes into every class, and everything the `java` set allows, because Kotlin's collections, strings and boxed numbers compile to `java.util` and `java.lang`. | Nothing by itself; a Kotlin project needs no other root allows. |
 | `hexagonal` | A `domain` package that cannot have any external dependency. With slices configured, one in every slice; without, one under the base package. The package is *isolated*: it inherits nothing from the root block or an enclosing declaration, and may reference only the language baseline and its own subtree. | Any class in `domain` that touches a framework, a library, an adapter or another package of the application, whatever the rest of the rules file allows. |
 | `hexagonalSpring` | The hexagonal layout of a vertically sliced Spring Boot service: the application class and a `config` package under the base package, and in every slice an isolated `domain` split into `model`, `ports` and `services`, an `application` layer, and `adapters.inbound` and `adapters.outbound` with fixed places for controllers and database code. See [The hexagonalSpring layout](#the-hexagonalspring-layout). | A package outside the layout, a dependency pointing outwards, a `@Configuration` outside `config`, a Spring web annotation outside `controllers`, a controller using more of Spring than HTTP needs, persistence code outside `adapters.outbound.database`, a misnamed port, service or configuration class. |
 
@@ -347,7 +369,7 @@ part goes under the base package. Under `com.acme` with slices `orders` and `cus
 | --- | --- | --- |
 | `com.acme` (flat) | anything the root block does not deny and no other package owns | `*Application` |
 | `com.acme.config` | anything, as above; owns `org.springframework.context.annotation.Configuration` | `*Config` |
-| `<slice>.domain.model` (flat, isolated) | `kotlin`, `org.jetbrains.annotations`, `java`, `org.springframework.stereotype` | |
+| `<slice>.domain.model` (flat, isolated) | `kotlin`, `org.jetbrains.annotations`, the `java` namespace, `org.springframework.stereotype` | |
 | `<slice>.domain.ports` (flat, isolated) | the same plus `domain.model` | `*Port` |
 | `<slice>.domain.services` (flat, isolated) | the same plus `domain.model` and `domain.ports` | `*Service` |
 | `<slice>.application` | `domain.*`, `org.springframework.stereotype`; denies `adapters.outbound` | |
@@ -355,9 +377,13 @@ part goes under the base package. Under `com.acme` with slices `orders` and `cus
 | `<slice>.adapters.inbound.controllers` | plus `org.springframework.http`, `.security.access.prepost`, `.validation.annotation`, `.web.multipart`; owns `org.springframework.web.bind.annotation` | |
 | `<slice>.adapters.inbound.controllers.error` | plus `org.springframework.dao`, `.security.access`, `.stereotype`, `.validation`, `.web` | |
 | `<slice>.adapters.outbound` | `domain.model`, `domain.ports`, `org.springframework.stereotype`; denies `domain.services` and `adapters.inbound` | |
-| `<slice>.adapters.outbound.database` (flat) | plus Spring Data, JPA, jOOQ, MongoDB, R2DBC, Exposed, and its `model` and `mappers` | |
-| `<slice>.adapters.outbound.database.mappers` (flat) | plus `database.model` | |
-| `<slice>.adapters.outbound.database.model` (flat) | plus the persistence libraries | |
+| `<slice>.adapters.outbound.database` (flat) | what `adapters.outbound` may, plus the persistence libraries and its `model` and `mappers` | |
+| `<slice>.adapters.outbound.database.mappers` (flat) | what `adapters.outbound` may, plus `database.model` | |
+| `<slice>.adapters.outbound.database.model` (flat) | what `adapters.outbound` may, plus the persistence libraries | |
+
+A row that says "plus" adds to the row of the enclosing package, which it inherits. The persistence
+libraries are `org.springframework.data`, `jakarta.persistence`, `javax.persistence`, `org.jooq`,
+`com.mongodb`, `io.r2dbc` and `org.jetbrains.exposed`.
 
 A naming rule on a file-name convention accepts the `Kt` facade too, so `OrderPort.kt` with
 top-level functions passes as `OrderPortKt`. Everything except the domain inherits the root block
@@ -392,7 +418,7 @@ this is a complete configuration; no rules file is needed:
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.3.21"
-    id("community.flock.byterails") version "0.0.2"
+    id("community.flock.byterails") version "0.1.0"
 }
 
 byterails {
@@ -407,7 +433,9 @@ byterails {
 Every other package of the application is undeclared and reported as such until the rules file lists
 it, which is the whitelist doing its job. Without `slices` the same configuration declares one
 `com.acme.domain`. A Java project uses `java` instead of `kotlin`. `./gradlew byterailsCheck` runs the
-check, and `check` depends on it.
+check, and `check` depends on it. In a violation of a package that a rule set declared without
+isolating it, the `fix` row points at where the package inherits from, the root block or `slice { }`,
+since the declaration itself cannot be edited.
 
 With a rules file present, the default rules are added to it. The file describes the rest of the
 structure and the rule sets supply the standard-library allows and the domain:
@@ -443,7 +471,7 @@ element:
 <plugin>
   <groupId>community.flock.byterails</groupId>
   <artifactId>byterails-maven-plugin</artifactId>
-  <version>0.0.2</version>
+  <version>0.1.0</version>
   <configuration>
     <basePackage>com.acme</basePackage>
     <slices>
@@ -498,7 +526,8 @@ pkg("domain.model") {
 ```
 
 The CLI takes `--default-rules kotlin,hexagonal`. Naming a rule set that does not exist is a
-configuration error that lists the known ids; naming one twice is folded into one. From compiled
+configuration error that lists the known ids and suggests the nearest one; naming one twice is folded
+into one. From compiled
 code the keywords are extension functions in `community.flock.byterails.rules`, so a test that
 builds rules with `byterails { kotlin(); hexagonal() }` imports them from there.
 
@@ -511,10 +540,25 @@ plugins {
 }
 ```
 
-The plugin adds a `byterailsCheck` task, wired into `check`, that reads the main classes of the
-project against `byterails.kts` in the root project. Every project of a multi-module build checks its
-own classes against the same file, plus the rules files of the [modules](#modules) when the build has
-them. Violations fail the task and are written to `build/reports/byterails/violations.json`.
+The plugin adds a `byterailsCheck` task that reads the classes of the project's `main` source set
+against `byterails.kts` in the root project. The classes and the dependency of `check` on the task come
+with the `java` plugin or one built on it, such as Kotlin's, so apply the plugin to projects that
+compile JVM code. Every project of a multi-module build checks its own classes against the same file,
+plus the rules files of the [modules](#modules) when the build has them. Violations fail the task and
+are written to `build/reports/byterails/violations.json`. The task is cacheable and up to date until
+the classes, a rules file or a setting changes.
+
+| Setting in `byterails { }` | Meaning | Default |
+| --- | --- | --- |
+| `rulesFile` | The rules file. It may be absent when `defaultRules` is set or the build has modules; otherwise a missing file fails the task. | `byterails.kts` in the root project |
+| `basePackage` | The package every name in the rules file is relative to. A subproject inherits the root project's value when the root project applies the plugin. | unset: every name is absolute |
+| `slices` | The [slices](#slices), relative to the base package. | none |
+| `defaultRules` | Ids of the [default rule sets](#default-rules) to apply. | none |
+| `module` | The [module](#modules) this project is. | unset |
+| `moduleRulesFile` | The rules file of this project's module; ignored without `module`. | `byterails.kts` in the project directory |
+| `reportOnly` | Print the violations and keep the build green. | `-Pbyterails.reportOnly`, else `false` |
+| `verbose` | Print every reference and the rules in effect. | `-Pbyterails.verbose`, else `false` |
+| `toolClasspath` | The byterails core and rule sets the task runs. | the `byterails` configuration: `byterails-core` and `byterails-rules` in the plugin's version |
 
 ### Reading a violation
 
@@ -531,7 +575,7 @@ Undeclared packages are one table for the run.
 ```
 byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows
   package  pkg("com.acme.domain") at byterails.kts:12
-  may use  com.acme.domain, java.lang, java.time, java.util, kotlin
+  may use  java.lang, java.time, java.util, kotlin, org.jetbrains.annotations
   fix      move the code, or add allow("org.springframework.web.client") to pkg("com.acme.domain")
   OrderService.kt:42  OrderService uses RestTemplate in place
   Shipping.kt         Shipping uses RestClient in client
@@ -547,23 +591,45 @@ byterails: 3 violations in 2 groups, 1,204 classes, 17 packages
 The kinds: `UNDECLARED` for a class in a package no declaration covers, `WRONG MODULE` for a class
 compiled in the wrong [module](#modules), `NOT ALLOWED` when no rule allows the referenced package,
 `DENIED` when a deny forbids it, `EXCLUSIVE` when another package owns it, and `NAMING` for a class
-name that matches no pattern. A block shows at most ten classes and the undeclared table at most
-twenty packages; the JSON report under `build/reports/byterails/violations.json` holds every reference,
-one entry per class and referenced type with every site under `sites` (schema 2), and so does the
+name that matches no pattern. `may use` lists the allows in effect for the package, its own and the
+inherited ones; the package's own subtree is always allowed and is not listed. A `hint` row follows the
+fix when the reference is one every compiler emits, `kotlin`, `java.lang` or
+`org.jetbrains.annotations`, so a first run on a project without those root allows explains itself.
+
+The undeclared packages of a run come first, as one table with the number of classes and the source
+files of each package, and a note when a flat declaration sits just above it:
+
+```
+byterails: UNDECLARED   2 packages are not declared
+  fix      declare each with pkg("...") in byterails.kts, or move its classes into a declared package; only declared packages may exist
+  com.acme.billing        3 classes  Invoice.kt, InvoiceLine.kt, Tax.kt
+  com.acme.infra.web.dto  1 class    OrderDto.kt   under flat pkg("com.acme.infra.web") at byterails.kts:31, which covers no sub-packages
+```
+
+The summary counts one violation per class and referenced type, and per class for the kinds that
+report a class as a whole. A block shows at most ten lines, a line names at most three members and
+six line numbers, and the undeclared table shows at most twenty packages; what was left out is
+announced with the switch that prints it. The JSON report under
+`build/reports/byterails/violations.json` holds every reference, one entry per class and referenced
+type with every site under `sites` (schema 2), next to the counts and the warnings, and so does the
 verbose output. `-Pbyterails.verbose=true`, or `byterails { verbose.set(true) }`, prints the settings
 of the run, every reference on a line of its own with the fully qualified names and the JVM descriptor
 as they stand in the class file, and the rules in effect for every package that has a violation. The
-same lines are logged at Gradle's info level, so `--info` shows them too.
+same lines are logged at Gradle's info level, so `--info` shows them too. A failing task ends with the
+count and both places: `byterails: 3 violations, listed above; every reference is in
+build/reports/byterails/violations.json and in the output of -Pbyterails.verbose=true`.
 
 A project whose packages all live under one root can set `byterails { basePackage.set("com.acme") }`
 and write the rules file relative to it: `pkg("domain")` then means `com.acme.domain`. A rule prefix
 is prefixed too when it points into the declared package tree, so `allow("domain")` becomes
-`allow("com.acme.domain")` while `allow("kotlin")` stays as written. The CLI takes `--base-package`, `--slices` and `--default-rules`.
+`allow("com.acme.domain")` while `allow("kotlin")` stays as written.
 
 While adopting byterails on an existing code base, `-Pbyterails.reportOnly=true` prints every
-violation and keeps the build green. The same switch is available as `byterails { reportOnly = true }`.
+violation and keeps the build green. The same switch is available as `byterails { reportOnly.set(true) }`.
 The tool runs in a class loader of its own, so neither Gradle's nor the build's Kotlin version
-matters; `byterails { toolClasspath.setFrom(...) }` overrides where the core comes from.
+matters; `byterails { toolClasspath.setFrom(...) }` overrides where the core comes from. A
+configuration error fails the task with the message alone; anything else is reported as an internal
+error, with the stack trace under `--stacktrace` or the verbose switch.
 
 ## Maven
 
@@ -585,12 +651,25 @@ matters; `byterails { toolClasspath.setFrom(...) }` overrides where the core com
 </plugin>
 ```
 
-The `check` goal runs in the `verify` phase and reads the module's compiled classes against
-`byterails.kts` in the multi-module root directory. Each module checks its own classes, violations
-fail the build, and the JSON report lands in `target/byterails/violations.json`. Properties:
-`-Dbyterails.reportOnly=true`, `-Dbyterails.verbose=true`, `-Dbyterails.skip=true`,
-`-Dbyterails.rulesFile=...`, `-Dbyterails.basePackage=...`, `-Dbyterails.slices=...`,
-`-Dbyterails.defaultRules=...`, `-Dbyterails.module=...` and `-Dbyterails.moduleRulesFile=...`.
+The `check` goal runs in the `verify` phase and reads the module's compiled classes, the build output
+directory, against `byterails.kts` in the multi-module root directory. Each module checks its own
+classes, violations fail the build, and the JSON report lands in `target/byterails/violations.json`.
+A module with `pom` packaging or without compiled classes is passed over.
+
+| Parameter | Property | Default |
+| --- | --- | --- |
+| `<rulesFile>` | `byterails.rulesFile` | `byterails.kts` in the multi-module root directory |
+| `<basePackage>` | `byterails.basePackage` | unset: every name is absolute |
+| `<slices>` | `byterails.slices`, comma-separated | none |
+| `<defaultRules>` | `byterails.defaultRules`, comma-separated | none |
+| `<module>` | `byterails.module` | unset |
+| `<moduleRulesFile>` | `byterails.moduleRulesFile` | `byterails.kts` in the module's directory |
+| `<reportOnly>` | `byterails.reportOnly` | `false` |
+| `<verbose>` | `byterails.verbose` | `false` |
+| `<skip>` | `byterails.skip` | `false` |
+| `<reportFile>` | | `target/byterails/violations.json` |
+| `<scriptCacheDir>` | | `target/byterails/script-cache` |
+
 `<verbose>true</verbose>` or `-Dbyterails.verbose=true` prints every reference and the rules in effect
 as the Gradle plugin's verbose does; the same lines are logged at the debug level, so `-X` shows them
 too. A Maven module that configures
@@ -600,9 +679,8 @@ same core.
 
 ## Command line and library
 
-The core ships a small CLI, exit status 1 on violations and 2 when the check could not run, for a
-configuration error or an internal error. `--verbose` prints every reference and the rules in effect,
-and the stack trace behind an error:
+The core ships a small CLI. Its exit status is 0 for a clean run, 1 on violations and 2 when the check
+could not run, for a usage error, a configuration error or an internal error:
 
 ```
 java -cp <byterails-core, byterails-rules and their dependencies> community.flock.byterails.cli.Main \
@@ -610,20 +688,43 @@ java -cp <byterails-core, byterails-rules and their dependencies> community.floc
     --report build/byterails.json --report-only --verbose
 ```
 
+| Option | Meaning |
+| --- | --- |
+| `--rules <file>` | The rules file. Required unless `--default-rules` is given. |
+| `--classes <dir>[:<dir>...]` | The class directories, separated by the platform's path separator; the option may be repeated. Required. |
+| `--base-package <package>` | The package the rules file is relative to. |
+| `--slices <a,b>` | The slices the `slice { }` block applies to. |
+| `--default-rules <a,b>` | Ids of the default rule sets to apply. |
+| `--report <file>` | Where to write the JSON report; without it none is written. |
+| `--cache <dir>` | Where compiled rules files are kept, by content hash, so an unchanged file is not compiled again. |
+| `--report-only` | Print the violations and exit with 0. |
+| `--verbose`, `-v` | Print every reference and the rules in effect, and the stack trace behind an error. |
+| `--help`, `-h` | Print the usage. |
+
 The same rules can be built in code with the DSL and checked from a test:
 
 ```kotlin
 val rules = byterails { allow("kotlin"); allow("java.lang"); pkg("com.acme") }
 val result = Byterails.check(rules, listOf(File("build/classes/kotlin/main")))
+assertTrue(result.isClean, result.violations.joinToString("\n") { it.message })
 ```
+
+`byterails { }` throws a `ConfigException` for what is wrong in the rules as written, and
+`Byterails.check` for what the validator finds. A rule set written relative to a base package or with
+a `slice { }` block is resolved first, in this order, with the extension functions of
+`community.flock.byterails.model`: `rules.withSlices(listOf("orders")).withBasePackage("com.acme")`.
+`Byterails.load(File("byterails.kts"), basePackage = "com.acme")` reads a rules file the way the
+plugins do and returns the rule set with its warnings.
 
 ## What byterails reads
 
 A reference is any class name the compiler wrote into the class file: superclasses and interfaces,
 generic signatures, annotations and their arguments, field and method descriptors, every instruction
-in a method body, invokedynamic call sites with their bootstrap arguments, local variable tables,
-exception handlers, record components and permitted subclasses. Nested classes are checked as
-classes of their own, so lambda and coroutine bodies are covered.
+in a method body, class literals, invokedynamic call sites with their bootstrap arguments, local
+variable tables, exception handlers, record components and permitted subclasses. Nested classes are
+checked as classes of their own, so lambda and coroutine bodies are covered. Every `.class` file under
+the class directories is read except `module-info.class`. A class file written for a JDK newer than
+the release of byterails knows stops the check with a message that names the JDK.
 
 ## What it cannot see
 
@@ -651,7 +752,8 @@ questions are in [docs/PRD.md](docs/PRD.md).
 
 The Gradle build compiles a corpus of Kotlin and Java fixtures and asserts where every kind of
 reference is found, runs the Gradle plugin against real builds with TestKit, and checks
-`byterails-dsl`, `byterails-core` and `byterails-rules` against this repository's own [`byterails.kts`](byterails.kts). The Maven plugin is
+`byterails-dsl`, `byterails-core` and `byterails-rules` against this repository's own [`byterails.kts`](byterails.kts)
+with the task `byterailsSelfCheck`. The Maven plugin is
 built by Maven, because its descriptor comes from Maven's plugin tooling, and runs its integration
 tests against sample projects with the invoker plugin.
 
