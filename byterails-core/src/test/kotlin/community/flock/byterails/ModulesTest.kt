@@ -17,6 +17,7 @@ import community.flock.byterails.model.including
 import community.flock.byterails.model.withBasePackage
 import community.flock.byterails.model.withModules
 import community.flock.byterails.report.ConsoleReporter
+import community.flock.byterails.rules.BaseRuleSet
 import community.flock.byterails.rules.DefaultRuleSet
 import community.flock.byterails.validation.RuleSetValidator
 import java.io.File
@@ -155,6 +156,28 @@ class ModulesTest {
         assertEquals(listOf("org.slf4j", "org.jetbrains.annotations", ""), moduleRoot.rules.map { it.prefix.name }, "the module's own rules, the set's root allows, then the set's rules for the root")
         assertEquals(null, ResolvedRuleSet(withLayout).declarationFor("com.acme.orders.stray"), "a flat module root leaves its sub-packages to the module's declarations")
         assertEquals(emptyList(), RuleSetValidator.validate(withLayout))
+    }
+
+    @Test
+    fun `the base rules of a module reach its isolated packages, the module file's own rules do not`() {
+        val baseline = object : BaseRuleSet("baseline", "a baseline", "is the baseline") {
+            override fun ByterailsBuilder.rules() {
+                allow("org.jetbrains.annotations")
+            }
+        }.build()
+        val orders = ModuleRules(
+            "orders",
+            byterails {
+                allow("org.slf4j")
+                pkg("core") {
+                    isolated()
+                    allow("java.time")
+                }
+            }.including(baseline, sliced = false),
+        )
+        val withBaseline = root.withModules(listOf(orders), "orders").withBasePackage("com.acme")
+        val core = withBaseline.packages.first { it.name == "com.acme.orders.core" }
+        assertEquals(listOf("org.jetbrains.annotations", "java.time"), ResolvedRuleSet(withBaseline).effectiveRules(core).map { it.rule.prefix.name })
     }
 
     @Test

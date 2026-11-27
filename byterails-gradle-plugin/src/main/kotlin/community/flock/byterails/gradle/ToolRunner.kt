@@ -36,6 +36,7 @@ internal object ToolRunner {
         basePackage: String?,
         slices: List<String>,
         defaultRules: List<String>,
+        baseRules: List<String>,
         rootDir: File,
         module: String?,
         modules: List<ModuleSpec>,
@@ -67,12 +68,14 @@ internal object ToolRunner {
         val options = java.util.HashMap<String, Any?>()
         options["verboseSwitch"] = VERBOSE_SWITCH
         options["verbose"] = verbose
+        options["baseRules"] = java.util.ArrayList(baseRules)
         val previous = Thread.currentThread().contextClassLoader
         Thread.currentThread().contextClassLoader = loader
         try {
             return if (withDetail != null) {
                 withDetail.invoke(null, *shared, options, out, detail) as Int
             } else {
+                if (baseRules.isNotEmpty()) throw GradleException("byterails: the byterails core on the tool classpath is older than the plugin and does not know baseRules")
                 if (verbose) out.accept("byterails: the byterails core on the tool classpath is older than the plugin, so verbose output is not available")
                 runner.getMethod("run", *sharedTypes, Consumer::class.java).invoke(null, *shared, out) as Int
             }

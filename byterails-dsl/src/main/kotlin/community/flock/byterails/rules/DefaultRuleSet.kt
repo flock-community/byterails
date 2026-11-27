@@ -1,118 +1,41 @@
 package community.flock.byterails.rules
 
-import community.flock.byterails.dsl.ByterailsBuilder
-import community.flock.byterails.model.ConfigException
-import community.flock.byterails.model.ConfigPhase
-import community.flock.byterails.model.Rule
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.including
-import java.util.ServiceLoader
 
 /**
- * A rule set applied by name, written with the same DSL as a `byterails.kts` file: root allows,
- * declarations relative to the base package, and a `slice { }` block for what every slice gets.
+ * A default rule set: a template for an architecture, such as `hexagonal`. It is applied by [id]
+ * with `defaultRules` in the build, or by its keyword in a rules file.
  *
- * The rule sets byterails ships live in the `byterails-rules` module, one file each in this same
- * package, next to the keyword that applies the set from a rules file. They reach the core through
- * a [DefaultRuleSetProvider] registered as a service, so the core knows a set by its [id] only, and
- * a rule set of a user's own needs this module alone.
- *
- * A rule set is applied by [id] from the build, or by its keyword from a rules file, and expands
- * into ordinary rules and declarations, so inheritance, matching and reporting apply to it unchanged.
- * Its `slice { }` block declares packages only, because without configured slices they go under the
- * base package, where slice-root rules would have no home.
- *
- * Every rule of a set carries the group `default:<id>`. In a violation's list of allows such rules
- * show as one token, `[<id>]`, with a hint that spells the set out, and the validator never reports
- * them as dead: narrowing a rule set with a deny or an exclusive is expected.
+ * It is written like a rules file: root allows, declarations relative to the base package, and a
+ * `slice { }` block for what every slice gets. Its `slice { }` block declares packages only, because
+ * without configured slices they go under the base package, where slice-root rules would have no
+ * home. Its rules are inherited like those of a rules file, so they do not reach an isolated
+ * package; what every package needs belongs in a [BaseRuleSet]. Its rules carry the group
+ * `default:<id>`.
  */
-abstract class DefaultRuleSet(
-    /** The name the build and the CLI use: `defaultRules.set(listOf("kotlin", "hexagonal"))`. */
-    val id: String,
-    /** One line on what the set declares, for documentation and error messages. */
-    val description: String,
-    /** What `[id]` stands for in a violation's hint: `[hexagonal] is the language baseline: ...`. */
-    val allowsLabel: String,
-) {
-    /** The rules of the set, as a rules file would write them. */
-    protected abstract fun ByterailsBuilder.rules()
+abstract class DefaultRuleSet(id: String, description: String, allowsLabel: String) :
+    PredefinedRuleSet(id, description, allowsLabel, GROUP, "default rule set") {
 
-    /** The group every rule of this set carries. */
-    val group: String get() = "$GROUP$id"
-
-    /**
-     * The set as a rule set of its own. Built afresh on every call, so that rules applied from a script
-     * carry the location of the line that applied them.
-     */
-    fun build(): RuleSet {
-        val ruleSet = ByterailsBuilder(group).apply { rules() }.build()
-        check(ruleSet.problems.isEmpty()) { "default rule set $id: ${ruleSet.problems.joinToString("; ")}" }
+    override fun verify(ruleSet: RuleSet) {
         val template = ruleSet.sliceTemplate
         check(template == null || (template.rules.isEmpty() && template.exported.isEmpty() && template.naming == null)) {
             "default rule set $id: slice { } of a rule set declares packages only"
         }
-        return ruleSet
     }
-
-    override fun equals(other: Any?): Boolean = other is DefaultRuleSet && other.id == id
-
-    override fun hashCode(): Int = id.hashCode()
-
-    override fun toString(): String = id
 
     companion object {
         const val GROUP = "default:"
 
-        /** Every rule set on the classpath, in the order the providers list them. */
-        val all: List<DefaultRuleSet> by lazy {
-            ServiceLoader.load(DefaultRuleSetProvider::class.java, DefaultRuleSetProvider::class.java.classLoader)
-                .flatMap { it.ruleSets }
-                .distinct()
-        }
+        /** Every default rule set on the classpath, in the order the providers list them. */
+        val all: List<DefaultRuleSet> get() = PredefinedRuleSet.all.filterIsInstance<DefaultRuleSet>()
 
-        fun byId(id: String): DefaultRuleSet {
-            val name = id.trim()
-            all.firstOrNull { it.id == name }?.let { return it }
-            val hint = if (all.isEmpty()) {
-                "; is byterails-rules on the classpath?"
-            } else {
-                val close = all.firstOrNull { it.id.equals(name, ignoreCase = true) || distance(it.id.lowercase(), name.lowercase()) <= 2 }
-                "; the known sets are ${all.joinToString(", ") { it.id }}" + (close?.let { "; did you mean \"${it.id}\"?" } ?: "")
-            }
-            throw ConfigException("\"$name\" is not a default rule set$hint", phase = ConfigPhase.SETTINGS)
-        }
-
-        /** The edit distance between two ids, for the did-you-mean. */
-        private fun distance(a: String, b: String): Int {
-            var previous = IntArray(b.length + 1) { it }
-            for (i in 1..a.length) {
-                val current = IntArray(b.length + 1)
-                current[0] = i
-                for (j in 1..b.length) {
-                    val substitution = previous[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1
-                    current[j] = minOf(previous[j] + 1, current[j - 1] + 1, substitution)
-                }
-                previous = current
-            }
-            return previous[b.length]
-        }
-
-        /** The rule set a rule came from, or null for a rule the user wrote. */
-        fun of(rule: Rule): DefaultRuleSet? =
-            rule.group?.takeIf { it.startsWith(GROUP) }?.removePrefix(GROUP)?.substringBefore(':')?.let { id -> all.firstOrNull { it.id == id } }
+        fun byId(id: String): DefaultRuleSet = byId(id, "default rule set", "defaultRules", "baseRules")
     }
 }
 
 /**
- * Contributes rule sets to [DefaultRuleSet.all]. Registered in
- * `META-INF/services/community.flock.byterails.rules.DefaultRuleSetProvider`, with a public no-argument constructor.
- */
-interface DefaultRuleSetProvider {
-    val ruleSets: List<DefaultRuleSet>
-}
-
-/**
- * Applies the rule sets named in the build to this rule set, before `withSlices` and `withBasePackage`.
+ * Applies the default rule sets named in the build to this rule set, before `withSlices` and `withBasePackage`.
  * With slices configured the slice packages go into the slice template, which is created when the
  * rules file has none; otherwise they go under the base package. A name given twice is applied once.
  */

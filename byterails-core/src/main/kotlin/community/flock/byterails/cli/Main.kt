@@ -7,7 +7,7 @@ import kotlin.system.exitProcess
 
 /**
  * `java -cp ... community.flock.byterails.cli.Main --rules byterails.kts --classes build/classes/kotlin/main [--classes ...]
- * [--base-package com.acme] [--slices orders,customers] [--default-rules hexagonal] [--report build/byterails.json] [--cache build/byterails-cache]
+ * [--base-package com.acme] [--slices orders,customers] [--base-rules kotlin] [--default-rules hexagonal] [--report build/byterails.json] [--cache build/byterails-cache]
  * [--report-only] [--verbose]`
  *
  * Exit status: 0 clean, 1 violations, 2 when the check could not run: a configuration or usage error, or an internal error.
@@ -24,6 +24,7 @@ object Main {
         var cache: File? = null
         var basePackage: String? = null
         var slices: List<String>? = null
+        var baseRules: List<String>? = null
         var defaultRules: List<String>? = null
         var reportOnly = false
         var verbose = false
@@ -36,6 +37,7 @@ object Main {
                 "--cache" -> cache = File(args.getOrNull(++i) ?: usage("--cache needs a directory"))
                 "--base-package" -> basePackage = args.getOrNull(++i) ?: usage("--base-package needs a package")
                 "--slices" -> slices = (args.getOrNull(++i) ?: usage("--slices needs a comma-separated list")).split(',')
+                "--base-rules" -> baseRules = (args.getOrNull(++i) ?: usage("--base-rules needs a comma-separated list")).split(',')
                 "--default-rules" -> defaultRules = (args.getOrNull(++i) ?: usage("--default-rules needs a comma-separated list")).split(',')
                 "--report-only" -> reportOnly = true
                 "--verbose", "-v" -> verbose = true
@@ -44,11 +46,12 @@ object Main {
             }
             i++
         }
-        if (rules == null && defaultRules == null) usage("--rules or --default-rules is required")
+        if (rules == null && defaultRules == null && baseRules == null) usage("--rules, --base-rules or --default-rules is required")
         if (classes.isEmpty()) usage("--classes is required")
         val options = java.util.HashMap<String, Any?>()
         options[ByterailsRunner.VERBOSE_SWITCH] = "--verbose"
         options[ByterailsRunner.VERBOSE] = verbose
+        options[ByterailsRunner.BASE_RULES] = baseRules?.let { java.util.ArrayList(it) }
         val count = try {
             ByterailsRunner.run(rules, classes, report, cache, basePackage, slices, defaultRules, null, null, null, options, { println(it) }) { line ->
                 if (verbose) println(line)
@@ -69,7 +72,7 @@ object Main {
     private fun usage(problem: String?): Nothing {
         if (problem != null) System.err.println("byterails: $problem")
         System.err.println(
-            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--base-package <package>] [--slices <a,b>] [--default-rules <a,b>] " +
+            "usage: byterails --rules byterails.kts --classes <dir>[:<dir>...] [--base-package <package>] [--slices <a,b>] [--base-rules <a,b>] [--default-rules <a,b>] " +
                 "[--report <file>] [--cache <dir>] [--report-only] [--verbose]",
         )
         exitProcess(2)

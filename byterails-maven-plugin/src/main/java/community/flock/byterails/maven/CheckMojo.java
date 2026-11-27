@@ -67,8 +67,17 @@ public class CheckMojo extends AbstractMojo {
     private List<String> slices;
 
     /**
-     * Rule sets byterails ships, by id, applied on top of the rules file or instead of it:
-     * {@code hexagonal} keeps a {@code domain} package free of external dependencies, and
+     * Base rule sets, by id: what a language gives every class. {@code java} allows the Java standard
+     * library, {@code kotlin} the Kotlin one and the Java one it compiles to. Base rules apply to every
+     * package, an isolated one included. On the root they reach the whole build; on a module they apply
+     * under the module.
+     */
+    @Parameter(property = "byterails.baseRules")
+    private List<String> baseRules;
+
+    /**
+     * Default rule sets, by id: templates for an architecture, applied on top of the rules file or
+     * instead of it. {@code hexagonal} keeps a {@code domain} package free of external dependencies, and
      * {@code hexagonalSpring} declares the hexagonal layout of a sliced Spring Boot service.
      * On a module, the sets apply under the module.
      */
@@ -144,23 +153,25 @@ public class CheckMojo extends AbstractMojo {
         }
         String currentModule = module == null || module.trim().isEmpty() ? null : module.trim();
         List<Map<String, Object>> modules = modules(currentModule);
-        boolean hasDefaults = defaultRules != null && !defaultRules.isEmpty();
+        boolean hasDefaults = (defaultRules != null && !defaultRules.isEmpty()) || (baseRules != null && !baseRules.isEmpty());
         if (!rulesFile.isFile() && !hasDefaults && modules.isEmpty()) {
-            throw new MojoFailureException("byterails: the rules file " + rulesFile + " does not exist and no defaultRules are set; add the file or set <defaultRules>");
+            throw new MojoFailureException("byterails: the rules file " + rulesFile + " does not exist and no baseRules or defaultRules are set; add the file or set <baseRules> or <defaultRules>");
         }
         if (currentModule == null && moduleRulesFile != null && moduleRulesFile.isFile() && !sameFile(moduleRulesFile, rulesFile)) {
             throw new MojoFailureException("byterails: " + moduleRulesFile + " is a module rules file, but the module sets no <module> name");
         }
         File rules = rulesFile.isFile() ? rulesFile : null;
-        // On a module, its own slices and default rules apply under the module; the root file gets the root project's.
+        // On a module, its own slices, base rules and default rules apply under the module; the root file gets the root project's.
         List<String> rootSlices = slices;
         List<String> rootDefaultRules = defaultRules;
+        List<String> rootBaseRules = baseRules;
         if (currentModule != null) {
             MavenProject root = rootProject();
             boolean rootIsThisModule = root == project || sameFile(root.getBasedir(), project.getBasedir());
             Xpp3Dom rootConfiguration = rootIsThisModule ? null : configurationOf(root);
             rootSlices = list(rootConfiguration, "slices");
             rootDefaultRules = list(rootConfiguration, "defaultRules");
+            rootBaseRules = list(rootConfiguration, "baseRules");
         }
 
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
@@ -170,6 +181,7 @@ public class CheckMojo extends AbstractMojo {
             Map<String, Object> options = new LinkedHashMap<>();
             options.put(ByterailsRunner.VERBOSE_SWITCH, VERBOSE_SWITCH);
             options.put(ByterailsRunner.VERBOSE, verbose);
+            options.put(ByterailsRunner.BASE_RULES, rootBaseRules == null ? List.of() : new ArrayList<>(rootBaseRules));
             violations = ByterailsRunner.run(
                     rules, List.of(classesDirectory), reportFile, scriptCacheDir, basePackage, rootSlices, rootDefaultRules,
                     multiModuleProjectDirectory, currentModule, modules, options,
@@ -215,7 +227,7 @@ public class CheckMojo extends AbstractMojo {
         for (MavenProject candidate : reactor()) {
             if (candidate == project || sameFile(candidate.getBasedir(), project.getBasedir())) {
                 if (currentModule != null && !currentSeen) {
-                    result.add(module(currentModule, moduleRulesFile, slices, defaultRules));
+                    result.add(module(currentModule, moduleRulesFile, slices, defaultRules, baseRules));
                     currentSeen = true;
                 }
                 continue;
@@ -225,20 +237,21 @@ public class CheckMojo extends AbstractMojo {
             if (name == null || name.trim().isEmpty()) continue;
             String file = value(configuration, "moduleRulesFile");
             File rules = file == null ? new File(candidate.getBasedir(), "byterails.kts") : new File(file);
-            result.add(module(name.trim(), rules, list(configuration, "slices"), list(configuration, "defaultRules")));
+            result.add(module(name.trim(), rules, list(configuration, "slices"), list(configuration, "defaultRules"), list(configuration, "baseRules")));
         }
         if (currentModule != null && !currentSeen) {
-            result.add(module(currentModule, moduleRulesFile, slices, defaultRules));
+            result.add(module(currentModule, moduleRulesFile, slices, defaultRules, baseRules));
         }
         return result;
     }
 
-    private static Map<String, Object> module(String name, File rulesFile, List<String> slices, List<String> defaultRules) {
+    private static Map<String, Object> module(String name, File rulesFile, List<String> slices, List<String> defaultRules, List<String> baseRules) {
         Map<String, Object> spec = new LinkedHashMap<>();
         spec.put("name", name);
         spec.put("rulesFile", rulesFile != null && rulesFile.isFile() ? rulesFile : null);
         spec.put("slices", slices == null ? List.of() : new ArrayList<>(slices));
         spec.put("defaultRules", defaultRules == null ? List.of() : new ArrayList<>(defaultRules));
+        spec.put("baseRules", baseRules == null ? List.of() : new ArrayList<>(baseRules));
         return spec;
     }
 

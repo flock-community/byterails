@@ -22,7 +22,7 @@ byterails {
         }
     }
 
-    // The default rule sets: an API in byterails-dsl, the shipped sets in byterails-rules, both written with the DSL.
+    // The base and default rule sets: an API in byterails-dsl, the shipped sets in byterails-rules, both written with the DSL.
     pkg("community.flock.byterails.rules") {
         allow("community.flock.byterails.model")
         allow("community.flock.byterails.dsl")

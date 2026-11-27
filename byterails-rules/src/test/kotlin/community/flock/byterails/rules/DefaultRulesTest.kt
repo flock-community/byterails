@@ -11,6 +11,7 @@ import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.withBasePackage
 import community.flock.byterails.model.withSlices
+import community.flock.byterails.validation.RuleSetValidator
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -22,18 +23,22 @@ class DefaultRulesTest {
 
     @Test
     fun `the shipped rule sets are found through the service loader, in documentation order`() {
-        assertEquals(listOf("java", "kotlin", "hexagonal", "hexagonalSpring"), DefaultRuleSet.all.map { it.id })
+        assertEquals(listOf("java", "kotlin", "hexagonal", "hexagonalSpring"), PredefinedRuleSet.all.map { it.id })
+        assertEquals(listOf("java", "kotlin"), BaseRuleSet.all.map { it.id })
+        assertEquals(listOf("hexagonal", "hexagonalSpring"), DefaultRuleSet.all.map { it.id })
         assertEquals(Hexagonal, DefaultRuleSet.byId(" hexagonal "))
+        assertEquals(Kotlin, BaseRuleSet.byId(" kotlin "))
     }
 
     @Test
     fun `every rule of a set carries the set's group and a slice block declares packages only`() {
-        for (set in DefaultRuleSet.all) {
+        for (set in PredefinedRuleSet.all) {
             val ruleSet = set.build()
             val rules = ruleSet.rootRules + ruleSet.packages.flatMap { it.rules } + ruleSet.sliceTemplate?.packages.orEmpty().flatMap { it.rules }
             assertTrue(rules.isNotEmpty(), "$set declares nothing")
             for (rule in rules) {
-                assertEquals(set, DefaultRuleSet.of(rule), "$rule of $set")
+                assertEquals(set, PredefinedRuleSet.of(rule), "$rule of $set")
+                assertEquals(set is BaseRuleSet, rule.isBase, "$rule of $set")
                 if (rule.kind == RuleKind.EXCLUSIVE) assertEquals("${set.group}:${rule.prefix.name}", rule.group, "an exclusive is its own claim")
             }
             assertEquals(null, ruleSet.sliceTemplate?.naming, "$set")
@@ -58,13 +63,36 @@ class DefaultRulesTest {
     }
 
     @Test
+    fun `base rules reach an isolated package, the rules file's own do not`() {
+        val rules = byterails {
+            kotlin()
+            allow("org.springframework")
+            pkg("com.acme") {
+                allow("org.jooq")
+            }
+            pkg("core") {
+                isolated()
+                allow("org.slf4j")
+            }
+            hexagonal()
+        }.withBasePackage("com.acme")
+        val resolved = ResolvedRuleSet(rules)
+        val standardLibrary = listOf("kotlin", "org.jetbrains.annotations") + Java.STANDARD_LIBRARY
+        val core = rules.packages.first { it.name == "com.acme.core" }
+        assertEquals(standardLibrary + "org.slf4j", resolved.effectiveRules(core).map { it.rule.prefix.name })
+        val domain = rules.packages.first { it.name == "com.acme.domain" }
+        assertEquals(standardLibrary + LANGUAGE_BASELINE, resolved.effectiveRules(domain).map { it.rule.prefix.name })
+        assertEquals(emptyList(), RuleSetValidator.validate(rules))
+    }
+
+    @Test
     fun `the build applies default rules into the slice template or under the base package`() {
         val sliced = RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("hexagonal"), sliced = true)
         assertEquals(listOf("domain"), sliced.sliceTemplate?.packages?.map { it.name })
         val flat = RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("hexagonal"), sliced = false).withBasePackage("com.acme")
         assertEquals(listOf("com.acme.domain"), flat.packages.map { it.name })
         val error = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("onion"), sliced = false) }
-        assertTrue(error.message!!.contains("\"onion\" is not a default rule set; the known sets are java, kotlin, hexagonal, hexagonalSpring"), error.message)
+        assertTrue(error.message!!.contains("\"onion\" is not a default rule set; the known sets are hexagonal, hexagonalSpring"), error.message)
         val typo = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("hexagonl"), sliced = false) }
         assertTrue(typo.message!!.contains("did you mean \"hexagonal\"?"), typo.message)
     }
@@ -114,7 +142,7 @@ class DefaultRulesTest {
         val kotlin = byterails { kotlin(); pkg("fixtures") }
         assertEquals(Java.STANDARD_LIBRARY, javaOnly.rootRules.map { it.prefix.name })
         assertEquals(listOf("kotlin", "org.jetbrains.annotations") + Java.STANDARD_LIBRARY, kotlin.rootRules.map { it.prefix.name })
-        assertTrue(javaOnly.rootRules.all { DefaultRuleSet.of(it) == Java })
+        assertTrue(javaOnly.rootRules.all { PredefinedRuleSet.of(it) == Java })
 
         val classes = ClassDirScanner.scan(Fixtures.classDirs)
         assertEquals(emptyList(), Checker(kotlin).check(classes).violations, "a Kotlin project needs nothing beyond the kotlin rule set")
@@ -141,8 +169,38 @@ class DefaultRulesTest {
 
     @Test
     fun `the build applies root rule sets and deduplicates them`() {
-        val ruleSet = RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("kotlin", "java", "kotlin"), sliced = false)
+        val ruleSet = RuleSet(emptyList(), emptyList()).withBaseRules(listOf("kotlin", "java", "kotlin"))
         assertEquals(listOf("kotlin", "org.jetbrains.annotations") + Java.STANDARD_LIBRARY, ruleSet.rootRules.map { it.prefix.name })
+    }
+
+    @Test
+    fun `a base rule set and a default rule set are named in their own setting`() {
+        val base = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withDefaultRules(listOf("kotlin"), sliced = false) }
+        assertTrue(base.message!!.endsWith("\"kotlin\" is a base rule set, not a default rule set; set it in baseRules instead of defaultRules"), base.message)
+        val default = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withBaseRules(listOf("hexagonal")) }
+        assertTrue(default.message!!.endsWith("\"hexagonal\" is a default rule set, not a base rule set; set it in defaultRules instead of baseRules"), default.message)
+        val typo = assertFailsWith<ConfigException> { RuleSet(emptyList(), emptyList()).withBaseRules(listOf("kotlinn")) }
+        assertTrue(typo.message!!.contains("\"kotlinn\" is not a base rule set; the known sets are java, kotlin; did you mean \"kotlin\"?"), typo.message)
+    }
+
+    @Test
+    fun `a base rule takes the place of the same allow in the rules file, so it still reaches an isolated package`() {
+        val rules = byterails {
+            allow("kotlin")
+            pkg("com.acme.core") { isolated() }
+        }.withBaseRules(listOf("kotlin"))
+        assertEquals(1, rules.rootRules.count { it.prefix.name == "kotlin" })
+        val core = rules.packages.first { it.name == "com.acme.core" }
+        assertTrue("kotlin" in ResolvedRuleSet(rules).effectiveRules(core).map { it.rule.prefix.name })
+    }
+
+    @Test
+    fun `load works without a rules file when only base rules are configured`() {
+        val dir = Files.createTempDirectory("byterails-rules").toFile()
+        val loaded = Byterails.load(File(dir, "byterails.kts"), null, "com.acme", listOf("orders"), listOf("hexagonal"), listOf("kotlin"))
+        val domain = loaded.ruleSet.packages.first { it.name == "com.acme.orders.domain" }
+        assertTrue("java" in ResolvedRuleSet(loaded.ruleSet).effectiveRules(domain).map { it.rule.prefix.name })
+        assertEquals(emptyList(), Byterails.load(File(dir, "byterails.kts"), baseRules = listOf("java")).ruleSet.packages)
     }
 
     @Test
@@ -163,6 +221,6 @@ class DefaultRulesTest {
         assertEquals("byterails.kts:2", kotlin.location.toString())
         val ports = loaded.ruleSet.packages.first { it.name == "com.acme.domain.ports" }
         assertEquals("byterails.kts:3", ports.location.toString())
-        assertEquals(HexagonalSpring, DefaultRuleSet.of(ports.rules.first()))
+        assertEquals(HexagonalSpring, PredefinedRuleSet.of(ports.rules.first()))
     }
 }

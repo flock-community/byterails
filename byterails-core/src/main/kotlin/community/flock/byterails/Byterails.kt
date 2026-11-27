@@ -11,6 +11,7 @@ import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.Severity
 import community.flock.byterails.model.withBasePackage
 import community.flock.byterails.model.withModules
+import community.flock.byterails.rules.withBaseRules
 import community.flock.byterails.rules.withDefaultRules
 import community.flock.byterails.model.withSlices
 import community.flock.byterails.report.ConsoleReporter
@@ -29,7 +30,9 @@ object Byterails {
      *
      * @param basePackage an optional package every declaration in the file is relative to; see [withBasePackage].
      * @param slices the slices the file's `slice { }` block applies to, relative to the base package; see [withSlices].
-     * @param defaultRules ids of the rule sets byterails ships, see `DefaultRuleSet`; with any of them the rules file may be absent.
+     * @param defaultRules ids of the default rule sets, the architecture templates, see `DefaultRuleSet`.
+     * @param baseRules ids of the base rule sets, which reach every package, see `BaseRuleSet`. With a
+     *   default or a base rule set the rules file may be absent.
      */
     fun load(
         rulesFile: File?,
@@ -37,7 +40,8 @@ object Byterails {
         basePackage: String? = null,
         slices: List<String>? = null,
         defaultRules: List<String>? = null,
-    ): Loaded = load(rulesFile, scriptCacheDir, basePackage, slices, defaultRules, emptyList(), null, null)
+        baseRules: List<String>? = null,
+    ): Loaded = load(rulesFile, scriptCacheDir, basePackage, slices, defaultRules, emptyList(), null, null, baseRules)
 
     /**
      * Loads and validates the rules of a build with modules: the root `byterails.kts` plus the rules
@@ -57,13 +61,15 @@ object Byterails {
         modules: List<ModuleConfiguration>,
         module: String?,
         rootDir: File?,
+        baseRules: List<String>? = null,
     ): Loaded {
         fun displayName(file: File) = displayName(file, rootDir)
         val defaults = defaultRules.orEmpty().filter { it.isNotBlank() }
+        val bases = baseRules.orEmpty().filter { it.isNotBlank() }
         val fromFile = when {
             rulesFile != null && rulesFile.isFile -> ScriptLoader.load(rulesFile, scriptCacheDir, displayName(rulesFile))
-            defaults.isNotEmpty() || modules.isNotEmpty() -> RuleSet(emptyList(), emptyList())
-            rulesFile == null -> throw ConfigException("no rules file is configured and no default rules are set; add a byterails.kts or set defaultRules", phase = ConfigPhase.SETTINGS)
+            defaults.isNotEmpty() || bases.isNotEmpty() || modules.isNotEmpty() -> RuleSet(emptyList(), emptyList())
+            rulesFile == null -> throw ConfigException("no rules file is configured and no base or default rules are set; add a byterails.kts or set baseRules or defaultRules", phase = ConfigPhase.SETTINGS)
             else -> throw ConfigException("the rules file ${rulesFile.path} does not exist", phase = ConfigPhase.SETTINGS)
         }
         val sliced = slices.orEmpty().any { it.isNotBlank() }
@@ -71,9 +77,9 @@ object Byterails {
             val file = configuration.rulesFile?.takeIf { it.isFile }
             val own = file?.let { ScriptLoader.load(it, scriptCacheDir, displayName(it)) } ?: RuleSet(emptyList(), emptyList())
             val moduleSlices = configuration.slices.filter { it.isNotBlank() }
-            ModuleRules(configuration.name, own.withDefaultRules(configuration.defaultRules, moduleSlices.isNotEmpty()), moduleSlices)
+            ModuleRules(configuration.name, own.withBaseRules(configuration.baseRules).withDefaultRules(configuration.defaultRules, moduleSlices.isNotEmpty()), moduleSlices)
         }
-        val ruleSet = fromFile.withDefaultRules(defaults, sliced).withSlices(slices).withModules(moduleRules, module).withBasePackage(basePackage)
+        val ruleSet = fromFile.withBaseRules(bases).withDefaultRules(defaults, sliced).withSlices(slices).withModules(moduleRules, module).withBasePackage(basePackage)
         // Every problem of every file in one run, each with the line it is on.
         val files = (listOfNotNull(rulesFile?.takeIf { it.isFile }) + modules.mapNotNull { it.rulesFile?.takeIf { file -> file.isFile } })
             .associateBy { displayName(it) }
@@ -112,14 +118,15 @@ object Byterails {
 
 /**
  * One module of the build, as the plugins configure it: its name, a package relative to the base
- * package; its own rules file, which may be absent; and the slices and default rules configured on
- * the module's project, which apply under the module.
+ * package; its own rules file, which may be absent; and the slices, default rules and base rules
+ * configured on the module's project, which apply under the module.
  */
 data class ModuleConfiguration(
     val name: String,
     val rulesFile: File?,
     val slices: List<String> = emptyList(),
     val defaultRules: List<String> = emptyList(),
+    val baseRules: List<String> = emptyList(),
 )
 
 /**
@@ -131,6 +138,9 @@ object ByterailsRunner {
 
     /** The option that names how the running tool turns verbose output on, for the lines that say what was left out. */
     const val VERBOSE_SWITCH = "verboseSwitch"
+
+    /** The option that holds the ids of the base rule sets of the root project, a list of String. */
+    const val BASE_RULES = "baseRules"
 
     /** The option that says whether the detail consumer reaches the user; informational. */
     const val VERBOSE = "verbose"
@@ -153,7 +163,7 @@ object ByterailsRunner {
      * @param rootDir the root directory of the build, for naming rules files by their relative path.
      * @param module the module whose classes [classDirs] hold, or null for a project outside the modules.
      * @param modules every module of the build, each a map with the keys `name` (a String), `rulesFile`
-     *   (a File, or absent), `slices` and `defaultRules` (lists of String, or absent); JDK types only, so
+     *   (a File, or absent), `slices`, `defaultRules` and `baseRules` (lists of String, or absent); JDK types only, so
      *   a build tool can hand them across a class loader boundary.
      */
     @JvmStatic
@@ -175,7 +185,8 @@ object ByterailsRunner {
      * The entry point with the verbose stream.
      *
      * @param options [VERBOSE_SWITCH], how the running tool turns verbose output on (`--verbose`,
-     *   `-Pbyterails.verbose=true`, `-Dbyterails.verbose=true`), and [VERBOSE], whether [detail] is shown.
+     *   `-Pbyterails.verbose=true`, `-Dbyterails.verbose=true`), [VERBOSE], whether [detail] is shown,
+     *   and [BASE_RULES], the base rule sets of the root project.
      * @param out the lines every run prints: the grouped violations and the summary.
      * @param detail the verbose lines: the run's settings, every reference on one line with the names as
      *   the class file spells them, and the rules in effect for every package with a violation. The build
@@ -204,11 +215,14 @@ object ByterailsRunner {
                 rulesFile = spec["rulesFile"] as? File,
                 slices = (spec["slices"] as? List<String>).orEmpty(),
                 defaultRules = (spec["defaultRules"] as? List<String>).orEmpty(),
+                baseRules = (spec["baseRules"] as? List<String>).orEmpty(),
             )
         }
+        @Suppress("UNCHECKED_CAST")
+        val baseRules = options[BASE_RULES] as? List<String>
         val currentModule = module?.takeIf { it.isNotBlank() }
-        val loaded = Byterails.load(rulesFile, scriptCacheDir, basePackage, slices, defaultRules, configurations, currentModule, rootDir)
-        describeRun(rulesFile, classDirs, basePackage, slices, defaultRules, rootDir, currentModule, configurations).forEach(detail::accept)
+        val loaded = Byterails.load(rulesFile, scriptCacheDir, basePackage, slices, defaultRules, configurations, currentModule, rootDir, baseRules)
+        describeRun(rulesFile, classDirs, basePackage, slices, baseRules, defaultRules, rootDir, currentModule, configurations).forEach(detail::accept)
         val result = Checker(loaded.ruleSet, loaded.warnings).check(ClassDirScanner.scan(classDirs))
         VerboseReporter.render(result).forEach(detail::accept)
         ConsoleReporter.render(result, options[VERBOSE_SWITCH] as? String ?: "--verbose").forEach(out::accept)
@@ -225,6 +239,7 @@ object ByterailsRunner {
         classDirs: List<File>,
         basePackage: String?,
         slices: List<String>?,
+        baseRules: List<String>?,
         defaultRules: List<String>?,
         rootDir: File?,
         module: String?,
@@ -232,8 +247,10 @@ object ByterailsRunner {
     ): List<String> {
         val files = listOfNotNull(rulesFile?.takeIf { it.isFile }) + modules.mapNotNull { it.rulesFile?.takeIf { file -> file.isFile } }
         val defaults = defaultRules.orEmpty().filter { it.isNotBlank() }
+        val bases = baseRules.orEmpty().filter { it.isNotBlank() }
         val rules = listOfNotNull(
             files.takeIf { it.isNotEmpty() }?.joinToString(", ") { Byterails.displayName(it, rootDir) } ?: "no rules file",
+            bases.takeIf { it.isNotEmpty() }?.let { "base rules ${it.joinToString(", ")}" },
             defaults.takeIf { it.isNotEmpty() }?.let { "default rules ${it.joinToString(", ")}" },
         )
         val build = listOfNotNull(

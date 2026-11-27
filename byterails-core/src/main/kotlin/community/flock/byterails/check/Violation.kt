@@ -26,7 +26,7 @@ data class RuleRef(
     val location: SourceLocation?,
     /** The block as a message names it, `pkg("com.acme.domain")`, `slice { }` or `basePackage { }`; null for the root block. */
     val block: String? = null,
-    /** The id of the default rule set the rule came from, or null for a rule the user wrote. */
+    /** The id of the base or default rule set the rule came from, or null for a rule the user wrote. */
     val ruleSet: String? = null,
 ) {
     /** `in pkg("com.acme.domain") at byterails.kts:14`, `at the top of byterails.kts:4` or `from the hexagonal rule set`. */
@@ -98,7 +98,7 @@ data class Violation(
     val fix: String,
     /** A pointer for references every compiler emits, so the first run on a Kotlin project explains itself. */
     val hint: String? = null,
-    /** The default rule sets among the allows: id to what the id stands for. */
+    /** The base and default rule sets among the allows: id to what the id stands for. */
     val ruleSets: Map<String, String> = emptyMap(),
     /** The class a lambda or anonymous class was written in, when this class is one; null when the class is reported under its own name. */
     val owner: ClassName? = null,

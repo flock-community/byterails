@@ -4,7 +4,7 @@ import community.flock.byterails.dsl.ByterailsBuilder
 import community.flock.byterails.dsl.NamingBuilder
 
 /**
- * The `hexagonalSpring` rule set: the vertically sliced hexagonal layout of a Spring Boot service, in
+ * The `hexagonalSpring` default rule set: the vertically sliced hexagonal layout of a Spring Boot service, in
  * whitelist form.
  *
  * Under the base package only the application class and the `config` package may exist. Every slice

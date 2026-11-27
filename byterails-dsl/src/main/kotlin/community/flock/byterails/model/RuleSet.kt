@@ -35,8 +35,12 @@ data class Rule(
 
     val isExported: Boolean get() = group?.startsWith(EXPORTED_GROUP) == true
 
+    /** True for a rule of a base rule set, which reaches every package, an isolated one included. */
+    val isBase: Boolean get() = group?.startsWith(BASE_GROUP) == true
+
     companion object {
         const val EXPORTED_GROUP = "exported:"
+        const val BASE_GROUP = "base:"
     }
 }
 
@@ -73,8 +77,9 @@ data class NamingRules(val patterns: List<NamePattern>, val location: SourceLoca
  * A declared package subtree with its own rules.
  *
  * An [isolated] declaration inherits nothing: not the root block, not its enclosing declarations.
- * Its classes may reference only what the declaration itself lists and its own subtree, which is
- * how a domain package is kept free of every external dependency whatever the rest of the file allows.
+ * Its classes may reference only what the declaration itself lists, its own subtree and what the
+ * base rules grant, such as the standard library of `kotlin`, which is how a domain package is kept
+ * free of every external dependency whatever the rest of the file allows.
  *
  * A [flat] declaration covers the package itself and nothing beneath it: a class in a sub-package
  * is undeclared unless another declaration covers it, and the flat declaration neither encloses
@@ -87,7 +92,7 @@ data class PackageDeclaration(
     val location: SourceLocation?,
     val isolated: Boolean = false,
     val flat: Boolean = false,
-    /** The group of the rule set this declaration came from, `default:<id>`, or null for one the user wrote. */
+    /** The group of the default rule set this declaration came from, `default:<id>`, or null for one the user wrote. */
     val group: String? = null,
     /** How the declaration was written, which is how a message names it. */
     val role: DeclarationRole = DeclarationRole.PACKAGE,
@@ -155,26 +160,29 @@ data class RuleSet(
 )
 
 /**
- * This rule set plus [other], which is how a default rule set joins a rules file or a build.
+ * This rule set plus [other], which is how a base or default rule set joins a rules file or a build.
  *
- * Root rules of [other] join the root block, minus the ones this set already has. Its declarations
+ * Root rules of [other] join the root block, minus the ones this set already has; a base rule takes
+ * the place of the same rule written in the file, so that it keeps reaching isolated packages. Its declarations
  * go under the base package. The packages of its slice template go into this set's template when
  * [sliced], creating one when the rules file has none, and under the base package otherwise, so a
  * layout written per slice applies unchanged to a service with a single slice. Nothing else of the
  * other template is taken.
  */
 fun RuleSet.including(other: RuleSet, sliced: Boolean): RuleSet {
-    val roots = other.rootRules.filter { rule -> rootRules.none { it.kind == rule.kind && it.prefix == rule.prefix } }
+    fun Rule.same(rule: Rule) = kind == rule.kind && prefix == rule.prefix
+    val kept = rootRules.filterNot { own -> !own.isBase && other.rootRules.any { it.isBase && it.same(own) } }
+    val roots = other.rootRules.filter { rule -> kept.none { it.same(rule) } }
     val slicePackages = other.sliceTemplate?.packages.orEmpty()
     return if (sliced) {
         val template = sliceTemplate ?: SliceTemplate(emptyList(), emptyList(), null, emptyList(), other.sliceTemplate?.location)
         copy(
-            rootRules = rootRules + roots,
+            rootRules = kept + roots,
             packages = packages + other.packages,
             sliceTemplate = template.copy(packages = template.packages + slicePackages),
             problems = problems + other.problems,
         )
     } else {
-        copy(rootRules = rootRules + roots, packages = packages + other.packages + slicePackages, problems = problems + other.problems)
+        copy(rootRules = kept + roots, packages = packages + other.packages + slicePackages, problems = problems + other.problems)
     }
 }

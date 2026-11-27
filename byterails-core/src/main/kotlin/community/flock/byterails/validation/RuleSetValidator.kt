@@ -12,7 +12,7 @@ import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.Severity
 import community.flock.byterails.model.SourceLocation
-import community.flock.byterails.rules.DefaultRuleSet
+import community.flock.byterails.rules.PredefinedRuleSet
 
 /**
  * Checks a [RuleSet] before any class file is read. Errors stop the build; warnings are printed.
@@ -105,7 +105,8 @@ object RuleSetValidator {
         }
         for (declaration in resolved.declarations) {
             val enclosingDenies = if (declaration.isolated) {
-                declaration.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, declaration) }
+                resolved.baseRules(declaration).filter { it.rule.kind == RuleKind.DENY } +
+                    declaration.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, declaration) }
             } else {
                 rootDenies + resolved.chain(declaration).flatMap { enclosing ->
                     enclosing.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, enclosing) }
@@ -123,7 +124,7 @@ object RuleSetValidator {
             declaration.rules.filter { it.kind == RuleKind.ALLOW }.map { EffectiveRule(it, declaration) }
         }
         for (allow in allAllows) {
-            if (DefaultRuleSet.of(allow.rule) != null) continue
+            if (PredefinedRuleSet.of(allow.rule) != null) continue
             val owner = resolved.exclusiveGroups.firstOrNull { group ->
                 group.prefix.covers(allow.rule.prefix) && !resolved.isInside(allow.origin, group)
             } ?: continue
@@ -142,7 +143,7 @@ object RuleSetValidator {
         problems: MutableList<ConfigProblem>,
     ) {
         if (!deny.rule.prefix.covers(allow.rule.prefix)) return
-        if (DefaultRuleSet.of(allow.rule) != null) return
+        if (PredefinedRuleSet.of(allow.rule) != null) return
         if (!reported.add(allow.rule to deny.rule)) return
         problems += error(
             "${allow.rule.text} in ${describe(allow)} can never apply: it is shadowed by ${deny.rule.text} in ${describe(deny)}${at(deny.rule.location)}, " +
