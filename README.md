@@ -612,7 +612,7 @@ the classes, a rules file or a setting changes.
 The output follows where a violation comes from: a heading per slice, under it a heading per package,
 and under that one block per cause. The package heading says once what its blocks share: the block of
 the rules file that declares the package, with its line, and what the package may use. A block is a
-sentence about the package, a `fix` row naming both ways out, and one line per class that starts with
+sentence about the package, a `fix` row naming the change to the rules file that would settle it (moving the code is always the other way out, so it is not repeated), and one line per class that starts with
 the source location and names the members involved. Violations with the same cause, that is the same
 package, kind, referenced package and deciding rule, form one block, because they are one line to
 change in the rules file or one piece of code to move. A violation is one class and one referenced
@@ -625,12 +625,12 @@ byterails: package com.acme.domain: 3 violations
   declared pkg("com.acme.domain") at byterails.kts:12
   may use  java.lang, java.time, java.util, kotlin, org.jetbrains.annotations
   NOT ALLOWED  uses org.springframework.web.client, which no rule allows
-    fix      move the code, or add allow("org.springframework.web.client") to pkg("com.acme.domain")
+    fix      add allow("org.springframework.web.client") to pkg("com.acme.domain")
     OrderService.kt:42  OrderService uses RestTemplate in place
     Shipping.kt         Shipping uses RestClient in client
   DENIED       uses jakarta.persistence, which deny("jakarta.persistence") forbids
     rule     deny("jakarta.persistence") in pkg("com.acme.domain") at byterails.kts:14
-    fix      move the code, or lift the deny
+    fix      lift the deny
     Order.kt  Order uses EntityManager in entityManager
 
 byterails: 3 violations in 2 groups, 1,204 classes, 17 packages

@@ -199,7 +199,7 @@ class ByterailsPluginFunctionalTest {
         assertTrue(result.output.contains("Invoice.java  Invoice uses Sale in notAllowed"), result.output)
         assertTrue(!result.output.contains("allowedThroughExport"), "the exported api is allowed: " + result.output)
         assertTrue(result.output.contains("may use  com.acme.billing.api, com.acme.sales.api, java.lang"), result.output)
-        assertTrue(result.output.contains("fix      move the code, or add allow(\"com.acme.sales.domain\") to pkg(\"com.acme.billing.domain\")"), result.output)
+        assertTrue(result.output.contains("fix      add allow(\"com.acme.sales.domain\") to pkg(\"com.acme.billing.domain\")"), result.output)
         assertTrue(result.output.contains("byterails: 1 violation in 1 group, 3 classes, 3 packages"), result.output)
     }
 

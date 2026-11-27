@@ -22,8 +22,8 @@ internal object Messages {
             declaration.ruleSet != null && declaration.isolated ->
                 "move the code; ${declaration.text} comes from the ${declaration.ruleSet} rule set and is isolated, so the rules file cannot widen it"
             declaration.ruleSet != null ->
-                "move the code, or add allow(\"$used\") where ${declaration.text} inherits from: the root block or slice { }"
-            else -> "move the code, or add allow(\"$used\") to ${declaration.text}"
+                "add allow(\"$used\") where ${declaration.text} inherits from: the root block or slice { }"
+            else -> "add allow(\"$used\") to ${declaration.text}"
         }
         return Texts(
             "${packageOf(cls)} uses $used, which no rule allows",
@@ -38,7 +38,7 @@ internal object Messages {
         return Texts(
             "${packageOf(cls)} uses $used, which ${rule.text} forbids",
             "$cls uses $target, which ${rule.text} forbids",
-            "move the code, or lift the deny",
+            "lift the deny",
             "uses $used, which ${rule.text} forbids",
         )
     }

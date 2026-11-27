@@ -36,7 +36,7 @@ class ReportersTest {
         "Order.kt",
         "com.acme.domain.Order uses jakarta.persistence.EntityManager, which deny(\"jakarta.persistence\") forbids",
         "com.acme.domain uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
-        "move the code, or lift the deny",
+        "lift the deny",
         clause = "uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
     )
 
@@ -57,7 +57,7 @@ class ReportersTest {
         "OrderService.kt",
         "com.acme.domain.OrderService uses org.springframework.web.client.RestTemplate, which no rule allows",
         "com.acme.domain uses org.springframework.web.client, which no rule allows",
-        "move the code, or add allow(\"org.springframework.web.client\") to pkg(\"com.acme.domain\")",
+        "add allow(\"org.springframework.web.client\") to pkg(\"com.acme.domain\")",
         clause = "uses org.springframework.web.client, which no rule allows",
     )
 
@@ -86,12 +86,12 @@ class ReportersTest {
                 "  declared pkg(\"com.acme.domain\") at byterails.kts:12",
                 "  may use  com.acme.domain, java.lang, java.time, java.util, kotlin",
                 "  NOT ALLOWED  uses org.springframework.web.client, which no rule allows",
-                "    fix      move the code, or add allow(\"org.springframework.web.client\") to pkg(\"com.acme.domain\")",
+                "    fix      add allow(\"org.springframework.web.client\") to pkg(\"com.acme.domain\")",
                 "    OrderService.kt:42,44  OrderService uses RestTemplate in place, client (+1 generated member)",
                 "    Shipping.kt:61         Shipping uses RestClient in send, client",
                 "  DENIED       uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
                 "    rule     deny(\"jakarta.persistence\") in pkg(\"com.acme.domain\") at byterails.kts:14",
-                "    fix      move the code, or lift the deny",
+                "    fix      lift the deny",
                 "    Order.kt  Order uses EntityManager in entityManager",
                 "",
                 "byterails: 4 violations in 2 groups, 1,204 classes, 17 packages",
@@ -271,7 +271,7 @@ class ReportersTest {
                 "  declared pkg(\"com.acme.domain\") at byterails.kts:12",
                 "  DENIED       uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
                 "    rule     deny(\"jakarta.persistence\") in pkg(\"com.acme.domain\") at byterails.kts:14",
-                "    fix      move the code, or lift the deny",
+                "    fix      lift the deny",
                 "    Order.kt  Order uses EntityManager in entityManager",
                 "",
                 "byterails: warning: 30 violations in 30 classes are not listed",
@@ -337,7 +337,7 @@ class ReportersTest {
         assertTrue(json.contains("\"allows\": [\"com.acme.domain\", \"java.lang\", \"java.time\", \"java.util\", \"kotlin\"]"))
         assertTrue(json.contains("\"declaration\": {\"package\": \"com.acme.domain\", \"text\": \"pkg(\\\"com.acme.domain\\\")\", \"location\": \"byterails.kts:12\", \"flat\": false, \"isolated\": false}"))
         assertTrue(json.contains("\"owner\": \"com.acme.domain.Shipping\""))
-        assertTrue(json.contains("\"fix\": \"move the code, or lift the deny\""))
+        assertTrue(json.contains("\"fix\": \"lift the deny\""))
         assertTrue(json.trim().endsWith("}"))
     }
 }

@@ -94,7 +94,7 @@ data class Violation(
     val message: String,
     /** The sentence every violation with the same root cause shares, naming the package: the console header. */
     val headline: String,
-    /** The two ways out, as one sentence. */
+    /** The change to the rules file that settles it. Moving the code always does too, so it is named only when it is the one way out or has a destination. */
     val fix: String,
     /** A pointer for references every compiler emits, so the first run on a Kotlin project explains itself. */
     val hint: String? = null,
