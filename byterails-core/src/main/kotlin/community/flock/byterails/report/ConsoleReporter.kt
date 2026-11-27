@@ -9,9 +9,11 @@ import community.flock.byterails.model.ClassName
 import java.util.Locale
 
 /**
- * Renders a [CheckResult] as the lines a developer reads in the build log: one block per
- * [ViolationGroup], with a sentence, the facts the group shares, the fix and one line per class, and
- * one table for every undeclared package.
+ * Renders a [CheckResult] as the lines a developer reads in the build log. Every undeclared package
+ * goes into one table. The other violations are grouped by where they come from: a heading per slice,
+ * under it a heading per package with the facts its violations share, the declaration and what the
+ * package may use, and under that one block per [ViolationGroup] with a sentence, the fix and one line
+ * per class. Violations marked [Violation.unlisted] are counted and not printed.
  */
 object ConsoleReporter {
 
@@ -33,15 +35,27 @@ object ConsoleReporter {
      */
     fun render(result: CheckResult, verboseSwitch: String = "--verbose"): List<String> {
         val lines = mutableListOf<String>()
-        val groups = ViolationGroup.of(result.violations)
+        val groups = listed(result)
         val undeclared = groups.filter { it.kind == ViolationKind.UNDECLARED_PACKAGE }
         if (undeclared.isNotEmpty()) {
             lines += undeclaredTable(undeclared, verboseSwitch)
             lines += ""
         }
-        groups.filter { it.kind != ViolationKind.UNDECLARED_PACKAGE }.forEach {
-            lines += render(it, verboseSwitch)
-            lines += ""
+        val declared = groups.filter { it.kind != ViolationKind.UNDECLARED_PACKAGE }
+        val sliced = declared.any { it.slice != null }
+        // Packages outside the slices first, then slice by slice.
+        declared.groupBy { it.slice }.entries.sortedBy { it.key ?: "" }.forEach { (slice, inSlice) ->
+            val packages = inSlice.groupBy { it.packageName }
+            if (sliced) {
+                val count = inSlice.sumOf { it.members.size }
+                val name = slice?.let { "slice $it" } ?: "outside the slices"
+                lines += "byterails: $name: $count ${plural(count, "violation")} in ${packages.size} ${plural(packages.size, "package")}"
+                lines += ""
+            }
+            packages.values.forEach {
+                lines += packageSection(it, verboseSwitch)
+                lines += ""
+            }
         }
         lines += legend(groups)
         result.warnings.forEach { lines += "byterails: warning: $it" }
@@ -51,40 +65,69 @@ object ConsoleReporter {
 
     fun summary(result: CheckResult): String {
         val count = result.violations.size
+        val unlisted = result.violations.count { it.unlisted }
+        val hidden = if (unlisted == 0) "" else " (${number(unlisted)} not listed)"
         val blocks = blocks(result)
         val grouped = if (blocks == 0) "" else " $blocks ${plural(blocks, "group")},"
         val warnings = if (result.warnings.isEmpty()) "" else ", ${result.warnings.size} ${plural(result.warnings.size, "warning")}"
-        return "byterails: $count ${plural(count, "violation")} in$grouped ${number(result.classCount)} ${plural(result.classCount, "class", "classes")}, " +
+        return "byterails: ${number(count)} ${plural(count, "violation")}$hidden in$grouped ${number(result.classCount)} ${plural(result.classCount, "class", "classes")}, " +
             "${number(result.packageCount)} ${plural(result.packageCount, "package")}$warnings"
     }
 
     /** The blocks the console shows: one per group, with every undeclared package in one table. */
     fun blocks(result: CheckResult): Int {
-        val groups = ViolationGroup.of(result.violations)
+        val groups = listed(result)
         val undeclared = groups.count { it.kind == ViolationKind.UNDECLARED_PACKAGE }
         return groups.size - undeclared + if (undeclared > 0) 1 else 0
     }
 
-    fun render(group: ViolationGroup, verboseSwitch: String = "--verbose"): List<String> {
-        if (group.kind == ViolationKind.UNDECLARED_PACKAGE) return undeclaredTable(listOf(group), verboseSwitch)
-        val lines = mutableListOf(header(group.kind, group.headline))
-        if (group.kind == ViolationKind.NOT_ALLOWED) {
-            group.declaration?.let { lines += row("package", it.description) }
-            val allows = if (group.allows.isEmpty()) {
-                "nothing" + if (group.declaration?.isolated == true) "; the package is isolated" else ""
-            } else {
-                group.allows.joinToString(", ")
-            }
-            lines += wrapped("may use", allows)
-        }
-        group.rule?.let { lines += row("rule", "${it.text} ${it.where}") }
-        lines += row("fix", group.fix)
-        group.hint?.let { lines += row("hint", it) }
-        lines += members(group, verboseSwitch)
+    /** The groups of the violations the console prints. */
+    private fun listed(result: CheckResult): List<ViolationGroup> = ViolationGroup.of(result.violations.filterNot { it.unlisted })
+
+    /**
+     * Every group of one package under one heading. What the groups share is said once: the package,
+     * its declaration, and what it may use when a reference no rule allows is among them.
+     */
+    private fun packageSection(groups: List<ViolationGroup>, verboseSwitch: String): List<String> {
+        val first = groups[0]
+        val count = groups.sumOf { it.members.size }
+        val lines = mutableListOf("byterails: package ${first.packageName.ifEmpty { "(default)" }}: $count ${plural(count, "violation")}")
+        groups.firstNotNullOfOrNull { it.declaration }?.let { lines += row("declared", it.description) }
+        groups.firstOrNull { it.kind == ViolationKind.NOT_ALLOWED }?.let { lines += mayUse(it, "  ") }
+        groups.forEach { lines += block(it, verboseSwitch, nested = true) }
         return lines
     }
 
-    private fun members(group: ViolationGroup, verboseSwitch: String): List<String> {
+    /** One group on its own, with the package in its sentence and the facts about the package as rows. */
+    fun render(group: ViolationGroup, verboseSwitch: String = "--verbose"): List<String> {
+        if (group.kind == ViolationKind.UNDECLARED_PACKAGE) return undeclaredTable(listOf(group), verboseSwitch)
+        return block(group, verboseSwitch, nested = false)
+    }
+
+    private fun block(group: ViolationGroup, verboseSwitch: String, nested: Boolean): List<String> {
+        val indent = if (nested) "    " else "  "
+        val lines = mutableListOf(if (nested) "  ${group.kind.label.padEnd(12)} ${group.clause}" else header(group.kind, group.headline))
+        if (!nested && group.kind == ViolationKind.NOT_ALLOWED) {
+            group.declaration?.let { lines += row("package", it.description) }
+            lines += mayUse(group, indent)
+        }
+        group.rule?.let { lines += row("rule", "${it.text} ${it.where}", indent) }
+        lines += row("fix", group.fix, indent)
+        group.hint?.let { lines += row("hint", it, indent) }
+        lines += members(group, verboseSwitch, indent)
+        return lines
+    }
+
+    private fun mayUse(group: ViolationGroup, indent: String): List<String> {
+        val allows = if (group.allows.isEmpty()) {
+            "nothing" + if (group.declaration?.isolated == true) "; the package is isolated" else ""
+        } else {
+            group.allows.joinToString(", ")
+        }
+        return wrapped("may use", allows, indent)
+    }
+
+    private fun members(group: ViolationGroup, verboseSwitch: String, indent: String): List<String> {
         val rows = if (group.perClass) {
             group.members.groupBy { it.reportedClass }.map { (owner, members) ->
                 Row(members.firstNotNullOfOrNull { it.sourceFile }, emptyList(), display(owner))
@@ -109,9 +152,9 @@ object ConsoleReporter {
         val sorted = rows.sortedWith(compareBy<Row> { it.file ?: "" }.thenBy { it.lines.firstOrNull() ?: Int.MAX_VALUE }.thenBy { it.text })
         val shown = sorted.take(MAX_MEMBERS)
         val width = shown.maxOf { it.location.length }
-        val lines = shown.map { "  ${it.location.padEnd(width)}  ${it.text}".trimEnd() }.toMutableList()
+        val lines = shown.map { "$indent${it.location.padEnd(width)}  ${it.text}".trimEnd() }.toMutableList()
         val rest = sorted.size - shown.size
-        if (rest > 0) lines += "  ... and $rest more; $verboseSwitch prints them all"
+        if (rest > 0) lines += "$indent... and $rest more; $verboseSwitch prints them all"
         return lines
     }
 
@@ -158,10 +201,10 @@ object ConsoleReporter {
 
     private fun header(kind: ViolationKind, headline: String) = "byterails: ${kind.label.padEnd(12)} $headline"
 
-    private fun row(label: String, value: String) = "  ${label.padEnd(8)} $value"
+    private fun row(label: String, value: String, indent: String = "  ") = "$indent${label.padEnd(8)} $value"
 
     /** A row whose value is wrapped at commas, so a long list of allows stays readable. */
-    private fun wrapped(label: String, value: String, width: Int = 100): List<String> {
+    private fun wrapped(label: String, value: String, indent: String, width: Int = 100): List<String> {
         val lines = mutableListOf<String>()
         var current = StringBuilder()
         for (part in value.split(", ")) {
@@ -173,7 +216,7 @@ object ConsoleReporter {
             current.append(part)
         }
         lines += current.toString()
-        return lines.mapIndexed { i, line -> if (i == 0) row(label, line) else "  ${"".padEnd(8)} $line" }
+        return lines.mapIndexed { i, line -> if (i == 0) row(label, line, indent) else "$indent${"".padEnd(8)} $line" }
     }
 
     /** `a, b, c and 2 more`. */

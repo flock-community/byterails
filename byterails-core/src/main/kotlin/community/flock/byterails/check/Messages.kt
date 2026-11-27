@@ -10,7 +10,8 @@ import community.flock.byterails.model.NamePattern
  */
 internal object Messages {
 
-    class Texts(val headline: String, val message: String, val fix: String)
+    /** [clause] is the [headline] without its subject, the package. */
+    class Texts(val headline: String, val message: String, val fix: String, val clause: String = headline)
 
     /** The package a target lives in, or the class itself for a class in the default package. */
     fun targetPackage(target: ClassName): String = target.packageName.ifEmpty { target.name }
@@ -28,6 +29,7 @@ internal object Messages {
             "${packageOf(cls)} uses $used, which no rule allows",
             "$cls uses $target, which no rule allows",
             fix,
+            "uses $used, which no rule allows",
         )
     }
 
@@ -37,6 +39,7 @@ internal object Messages {
             "${packageOf(cls)} uses $used, which ${rule.text} forbids",
             "$cls uses $target, which ${rule.text} forbids",
             "move the code, or lift the deny",
+            "uses $used, which ${rule.text} forbids",
         )
     }
 
@@ -47,6 +50,7 @@ internal object Messages {
             "${packageOf(cls)} uses $used, which only $owners may use",
             "$cls uses $target, which only $owners may use",
             "move the code to $firstOwner, or turn the exclusive into a plain allow and add allow(\"$used\") to $here",
+            "uses $used, which only $owners may use",
         )
     }
 
@@ -56,6 +60,7 @@ internal object Messages {
             "classes in ${packageOf(cls)} must $phrase",
             "$cls must $phrase",
             "rename the classes, or move them out of ${packageOf(cls)}",
+            "classes must $phrase",
         )
     }
 
@@ -93,17 +98,18 @@ internal object Messages {
     fun wrongModule(cls: ClassName, mismatch: ModuleMismatch): Texts {
         val current = mismatch.compiledIn
         val owner = mismatch.owner
-        fun sentence(subject: String) = when {
-            owner == null -> "$subject is compiled in module \"${current!!.name}\" but lies outside its package ${current.prefix}"
-            current == null -> "$subject belongs to module \"${owner.name}\", which owns ${owner.prefix}, but is compiled outside the modules"
-            else -> "$subject belongs to module \"${owner.name}\", which owns ${owner.prefix}, but is compiled in module \"${current.name}\""
+        val clause = when {
+            owner == null -> "is compiled in module \"${current!!.name}\" but lies outside its package ${current.prefix}"
+            current == null -> "belongs to module \"${owner.name}\", which owns ${owner.prefix}, but is compiled outside the modules"
+            else -> "belongs to module \"${owner.name}\", which owns ${owner.prefix}, but is compiled in module \"${current.name}\""
         }
+        fun sentence(subject: String) = "$subject $clause"
         val fix = when {
             owner == null -> "move the classes under ${current!!.prefix}, or into the project of the module that owns them"
             current == null -> "move the classes into the project of module \"${owner.name}\", or out of ${owner.prefix}"
             else -> "move the classes into the project of module \"${owner.name}\", or under ${current.prefix}"
         }
-        return Texts(sentence(packageOf(cls)), sentence(cls.name), fix)
+        return Texts(sentence(packageOf(cls)), sentence(cls.name), fix, clause)
     }
 
     fun packageOf(cls: ClassName): String = cls.packageName.ifEmpty { "(default)" }

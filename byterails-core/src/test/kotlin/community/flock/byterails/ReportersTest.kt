@@ -37,6 +37,7 @@ class ReportersTest {
         "com.acme.domain.Order uses jakarta.persistence.EntityManager, which deny(\"jakarta.persistence\") forbids",
         "com.acme.domain uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
         "move the code, or lift the deny",
+        clause = "uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
     )
 
     private val notAllowed = Violation(
@@ -57,6 +58,7 @@ class ReportersTest {
         "com.acme.domain.OrderService uses org.springframework.web.client.RestTemplate, which no rule allows",
         "com.acme.domain uses org.springframework.web.client, which no rule allows",
         "move the code, or add allow(\"org.springframework.web.client\") to pkg(\"com.acme.domain\")",
+        clause = "uses org.springframework.web.client, which no rule allows",
     )
 
     private val notAllowedAgain = notAllowed.copy(
@@ -80,17 +82,17 @@ class ReportersTest {
     fun `console output follows the documented shape`() {
         assertEquals(
             listOf(
-                "byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows",
-                "  package  pkg(\"com.acme.domain\") at byterails.kts:12",
+                "byterails: package com.acme.domain: 4 violations",
+                "  declared pkg(\"com.acme.domain\") at byterails.kts:12",
                 "  may use  com.acme.domain, java.lang, java.time, java.util, kotlin",
-                "  fix      move the code, or add allow(\"org.springframework.web.client\") to pkg(\"com.acme.domain\")",
-                "  OrderService.kt:42,44  OrderService uses RestTemplate in place, client (+1 generated member)",
-                "  Shipping.kt:61         Shipping uses RestClient in send, client",
-                "",
-                "byterails: DENIED       com.acme.domain uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
-                "  rule     deny(\"jakarta.persistence\") in pkg(\"com.acme.domain\") at byterails.kts:14",
-                "  fix      move the code, or lift the deny",
-                "  Order.kt  Order uses EntityManager in entityManager",
+                "  NOT ALLOWED  uses org.springframework.web.client, which no rule allows",
+                "    fix      move the code, or add allow(\"org.springframework.web.client\") to pkg(\"com.acme.domain\")",
+                "    OrderService.kt:42,44  OrderService uses RestTemplate in place, client (+1 generated member)",
+                "    Shipping.kt:61         Shipping uses RestClient in send, client",
+                "  DENIED       uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
+                "    rule     deny(\"jakarta.persistence\") in pkg(\"com.acme.domain\") at byterails.kts:14",
+                "    fix      move the code, or lift the deny",
+                "    Order.kt  Order uses EntityManager in entityManager",
                 "",
                 "byterails: 4 violations in 2 groups, 1,204 classes, 17 packages",
             ),
@@ -114,13 +116,14 @@ class ReportersTest {
             )
         }
         val lines = ConsoleReporter.render(CheckResult(many, 30, 1, emptyList()), "-Pbyterails.verbose=true")
-        assertEquals("byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows", lines[0])
-        assertEquals("  Service1.kt:1    Service1 uses RestTemplate in place", lines[4])
-        assertEquals("  Service18.kt:18  Service18 uses RestTemplate in place", lines[13], "rows are ordered by source file")
-        assertEquals("  ... and 13 more; -Pbyterails.verbose=true prints them all", lines[14])
-        assertEquals("", lines[15])
-        assertEquals("byterails: 23 violations in 1 group, 30 classes, 1 package", lines[16])
-        assertEquals(17, lines.size)
+        assertEquals("byterails: package com.acme.domain: 23 violations", lines[0])
+        assertEquals("  NOT ALLOWED  uses org.springframework.web.client, which no rule allows", lines[3])
+        assertEquals("    Service1.kt:1    Service1 uses RestTemplate in place", lines[5])
+        assertEquals("    Service18.kt:18  Service18 uses RestTemplate in place", lines[14], "rows are ordered by source file")
+        assertEquals("    ... and 13 more; -Pbyterails.verbose=true prints them all", lines[15])
+        assertEquals("", lines[16])
+        assertEquals("byterails: 23 violations in 1 group, 30 classes, 1 package", lines[17])
+        assertEquals(18, lines.size)
     }
 
     @Test
@@ -154,6 +157,7 @@ class ReportersTest {
         "com.acme.domain.Order must end with \"UseCase\"",
         "classes in com.acme.domain must end with \"UseCase\"",
         "rename the classes, or move them out of com.acme.domain",
+        clause = "classes must end with \"UseCase\"",
     )
 
     @Test
@@ -166,10 +170,11 @@ class ReportersTest {
                 "  fix      declare it with pkg(\"com.acme.stray\") in byterails.kts, or move its classes into a declared package",
                 "  com.acme.stray  2 classes  One.kt, Two.kt",
                 "",
-                "byterails: NAMING       classes in com.acme.domain must end with \"UseCase\"",
-                "  rule     naming { endsWith(\"UseCase\") } in pkg(\"com.acme.domain\") at byterails.kts:9",
-                "  fix      rename the classes, or move them out of com.acme.domain",
-                "  Order.kt  Order",
+                "byterails: package com.acme.domain: 1 violation",
+                "  NAMING       classes must end with \"UseCase\"",
+                "    rule     naming { endsWith(\"UseCase\") } in pkg(\"com.acme.domain\") at byterails.kts:9",
+                "    fix      rename the classes, or move them out of com.acme.domain",
+                "    Order.kt  Order",
                 "",
                 "byterails: 3 violations in 2 groups, 3 classes, 2 packages",
             ),
@@ -207,12 +212,13 @@ class ReportersTest {
         val lines = ConsoleReporter.render(CheckResult(listOf(fromSet, fromSet.copy(target = ClassName.fromDotted("org.springframework.web.client.RestClient"))), 2, 1, listOf(warning)))
         assertEquals(
             listOf(
-                "byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows",
-                "  package  pkg(\"com.acme.domain\") from the hexagonal rule set, isolated",
+                "byterails: package com.acme.domain: 2 violations",
+                "  declared pkg(\"com.acme.domain\") from the hexagonal rule set, isolated",
                 "  may use  [hexagonal]",
-                "  fix      move the code; pkg(\"com.acme.domain\") comes from the hexagonal rule set and is isolated, so the rules file cannot widen it",
-                "  OrderService.kt:42,44  OrderService uses RestClient in place, client (+1 generated member)",
-                "  OrderService.kt:42,44  OrderService uses RestTemplate in place, client (+1 generated member)",
+                "  NOT ALLOWED  uses org.springframework.web.client, which no rule allows",
+                "    fix      move the code; pkg(\"com.acme.domain\") comes from the hexagonal rule set and is isolated, so the rules file cannot widen it",
+                "    OrderService.kt:42,44  OrderService uses RestClient in place, client (+1 generated member)",
+                "    OrderService.kt:42,44  OrderService uses RestTemplate in place, client (+1 generated member)",
                 "",
                 "byterails: [hexagonal] stands for the language baseline: kotlin, java.lang",
                 "byterails: warning: byterails.kts:7: packages depend on each other in a cycle: a -> b -> a",
@@ -220,6 +226,60 @@ class ReportersTest {
             ),
             lines,
         )
+    }
+
+    @Test
+    fun `violations are grouped per slice and under it per package`() {
+        fun inSlice(violation: Violation, slice: String, pkg: String) = violation.copy(
+            className = ClassName.fromDotted("com.acme.$slice.$pkg.${violation.className.simpleName}"),
+            slice = "com.acme.$slice",
+            declaration = null,
+        )
+        val violations = listOf(
+            inSlice(denied, "orders", "domain"), inSlice(notAllowed, "orders", "domain"), inSlice(notAllowed, "orders", "infra"),
+            inSlice(denied, "customers", "domain"), denied,
+        )
+        val lines = ConsoleReporter.render(CheckResult(violations, 5, 4, emptyList()))
+        assertEquals(
+            listOf(
+                "byterails: outside the slices: 1 violation in 1 package",
+                "byterails: package com.acme.domain: 1 violation",
+                "byterails: slice com.acme.customers: 1 violation in 1 package",
+                "byterails: package com.acme.customers.domain: 1 violation",
+                "byterails: slice com.acme.orders: 3 violations in 2 packages",
+                "byterails: package com.acme.orders.domain: 2 violations",
+                "byterails: package com.acme.orders.infra: 1 violation",
+                "byterails: 5 violations in 5 groups, 5 classes, 4 packages",
+            ),
+            lines.filter { it.startsWith("byterails:") },
+        )
+        val orders = lines.indexOf("byterails: package com.acme.orders.domain: 2 violations")
+        assertEquals("  may use  com.acme.domain, java.lang, java.time, java.util, kotlin", lines[orders + 1])
+        assertEquals("  NOT ALLOWED  uses org.springframework.web.client, which no rule allows", lines[orders + 2])
+    }
+
+    @Test
+    fun `unlisted violations are counted and not printed`() {
+        val noise = (1..30).map { i ->
+            notAllowed.copy(className = ClassName.fromDotted("com.acme.domain.Service$i"), target = ClassName.fromDotted("kotlin.Metadata"), unlisted = true)
+        }
+        val warning = ConfigProblem(Severity.WARNING, "30 violations in 30 classes are not listed", null)
+        val lines = ConsoleReporter.render(CheckResult(noise + denied, 1204, 17, listOf(warning)))
+        assertEquals(
+            listOf(
+                "byterails: package com.acme.domain: 1 violation",
+                "  declared pkg(\"com.acme.domain\") at byterails.kts:12",
+                "  DENIED       uses jakarta.persistence, which deny(\"jakarta.persistence\") forbids",
+                "    rule     deny(\"jakarta.persistence\") in pkg(\"com.acme.domain\") at byterails.kts:14",
+                "    fix      move the code, or lift the deny",
+                "    Order.kt  Order uses EntityManager in entityManager",
+                "",
+                "byterails: warning: 30 violations in 30 classes are not listed",
+                "byterails: 31 violations (30 not listed) in 1 group, 1,204 classes, 17 packages, 1 warning",
+            ),
+            lines,
+        )
+        assertTrue(JsonReporter.render(CheckResult(noise, 30, 1, emptyList())).contains("\"unlisted\": true"))
     }
 
     @Test

@@ -8,7 +8,7 @@ String[] expected = {
     "byterails: EXCLUSIVE    OrderList.java  com.acme.domain.OrderList.orders uses java.util.List; exclusive(\"java.util\") in pkg(\"com.acme.infra\") at byterails.kts:6",
     "byterails: rules of com.acme.domain: pkg(\"com.acme.domain\") at byterails.kts:3",
     "byterails:   allow(\"java.lang\") at the top of byterails.kts:2",
-    "byterails: EXCLUSIVE    com.acme.domain uses java.util, which only com.acme.infra may use",
+    "  EXCLUSIVE    uses java.util, which only com.acme.infra may use",
     "byterails: 1 violation, listed above; every reference is in target/byterails/violations.json and in the output of -Dbyterails.verbose=true"
 };
 for (String line : expected) {

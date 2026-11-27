@@ -21,6 +21,12 @@ data class ViolationGroup(
     /** True for the kinds that report a class as a whole rather than a reference in it. */
     val perClass: Boolean get() = targetPackage == null
 
+    /** The [headline] without its subject, for a block printed under its package. */
+    val clause: String get() = members.first().clause
+
+    /** The root of the slice the package lies in, or null for a package outside the slices. */
+    val slice: String? get() = members.first().slice
+
     /** The base and default rule sets among the allows: id to what the id stands for. */
     val ruleSets: Map<String, String> get() = members.first().ruleSets
 

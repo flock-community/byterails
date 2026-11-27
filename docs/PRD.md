@@ -217,7 +217,7 @@ The violation message is the product for most people who meet byterails, so it i
 
 1. **FR-33 Violation message.** Every violation prints as a sentence with the package as its subject, then the block of the rules file it concerns with its line, what the package may use for a not-allowed violation, a fix that names both ways out (move the code, or the one change to the rules file), and one line per class that starts with the source location and names the members involved. A violation is one class and one referenced type; every place the type was found is an occurrence with its line, and members the compiler generated (property accessors, record and data-class methods, lambda bodies, bridges) fold into the member the developer wrote. A lambda or anonymous class is reported under the class and method it was written in, read from the EnclosingMethod attribute and the Kotlin metadata kind.
 2. **FR-34 Not-allowed explains itself.** A not-allowed violation names the declaration of the package with its line, or the rule set that declared it, and lists the effective allows, so the developer sees what the package may use without opening the config.
-3. **FR-35 Grouping.** The console groups violations by root cause: the source package, the kind and the target package, plus the deciding rule where there is one, so a group is one change to the rules file or one move. The shared facts print once per group, then one line per class, capped at ten. Undeclared packages are one table for the run, capped at twenty packages. Rule sets among the allows show as one token with a legend once at the end; warnings print last. Groups and members are in stable sorted order, followed by one summary line with the violation, group and warning counts. Where a cap cuts, the line names the verbose switch of the tool that is running.
+3. **FR-35 Grouping.** The console groups violations by where they come from and then by root cause: a heading per slice, a heading per package that says once what its violations share (the declaration and what the package may use), and under it one block per kind and target package, plus the deciding rule where there is one, so a block is one change to the rules file or one move. A block is a sentence, the fix and one line per class, capped at ten. When a build evidently has no rules for the language, twenty or more not-allowed uses of `java`, `kotlin` or `org.jetbrains.annotations` in at least half of the classes that have rules, those violations are counted and left out of the console, and one warning names the base rules to apply; the JSON report marks them `unlisted`. Undeclared packages are one table for the run, capped at twenty packages. Rule sets among the allows show as one token with a legend once at the end; warnings print last. Groups and members are in stable sorted order, followed by one summary line with the violation, group and warning counts. Where a cap cuts, the line names the verbose switch of the tool that is running.
 4. **FR-35b Verbose output.** Next to the grouped output the core produces a verbose stream: the settings of the run (rules files, base rules, default rules, base package, slices, modules, class directories), every reference on one line with the fully qualified names and the JVM descriptor as they stand in the class file, and the rules in effect for every package with a violation, each with the block and line it comes from. The CLI prints it with `--verbose`; the Gradle plugin logs it at the info level, so `--info` shows it, and at the lifecycle level with `verbose` or `-Pbyterails.verbose=true`; the Maven plugin logs it at the debug level, so `-X` shows it, and at the info level with `<verbose>` or `-Dbyterails.verbose=true`.
 5. **FR-36 Report-only mode.** A plugin setting or a command-line property switches every violation to a warning and lets the task succeed. It lives in the build configuration, not in the rules file, so the rules file stays a pure description of the architecture.
 6. **FR-37 Report file.** Every run writes a JSON report with the same content as the console output, under the build tool's report directory, with a stable schema. Schema 2 has one entry per class and referenced type, with every site under `sites`, the declaration, the rule with its block and rule set, the message and the fix. SARIF and JUnit XML are generated from it in 0.3.
@@ -229,17 +229,17 @@ The violation message is the product for most people who meet byterails, so it i
 Two messages as a developer would see them:
 
 ```
-byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows
-  package  pkg("com.acme.domain") at byterails.kts:12
+byterails: package com.acme.domain: 3 violations
+  declared pkg("com.acme.domain") at byterails.kts:12
   may use  com.acme.domain, java.lang, java.time, java.util, kotlin
-  fix      move the code, or add allow("org.springframework.web.client") to pkg("com.acme.domain")
-  OrderService.kt:42  OrderService uses RestTemplate in place
-  Shipping.kt         Shipping uses RestClient in client
-
-byterails: DENIED       com.acme.domain uses jakarta.persistence, which deny("jakarta.persistence") forbids
-  rule     deny("jakarta.persistence") in pkg("com.acme.domain") at byterails.kts:14
-  fix      move the code, or lift the deny
-  Order.kt  Order uses EntityManager in entityManager
+  NOT ALLOWED  uses org.springframework.web.client, which no rule allows
+    fix      move the code, or add allow("org.springframework.web.client") to pkg("com.acme.domain")
+    OrderService.kt:42  OrderService uses RestTemplate in place
+    Shipping.kt         Shipping uses RestClient in client
+  DENIED       uses jakarta.persistence, which deny("jakarta.persistence") forbids
+    rule     deny("jakarta.persistence") in pkg("com.acme.domain") at byterails.kts:14
+    fix      move the code, or lift the deny
+    Order.kt  Order uses EntityManager in entityManager
 
 byterails: 3 violations in 2 groups, 1,204 classes, 17 packages
 ```

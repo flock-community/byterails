@@ -84,6 +84,8 @@ class SlicesTest {
             slices.map { it.kind to it.className.name }.distinct(),
         )
         val crossSlice = slices.first { it.kind == ViolationKind.NOT_ALLOWED }
+        assertEquals(setOf("fixtures.slices.customers"), slices.map { it.slice }.toSet(), "a violation names the slice it lies in")
+        assertTrue(result.violations.filter { it.className.packageName.startsWith("fixtures.app") }.all { it.slice == null })
         assertEquals("fixtures.slices.orders.domain.Order", crossSlice.target?.name)
         assertTrue(crossSlice.allows.contains("fixtures.slices.orders.api"), crossSlice.allows.toString())
         val exclusive = slices.first { it.kind == ViolationKind.EXCLUSIVE }

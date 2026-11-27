@@ -41,6 +41,7 @@ object JsonReporter {
         fields += "\"kind\": ${quote(v.kind.name)}"
         fields += "\"class\": ${quote(v.className.name)}"
         fields += "\"package\": ${quote(v.className.packageName)}"
+        v.slice?.let { fields += "\"slice\": ${quote(it)}" }
         v.owner?.let { fields += "\"owner\": ${quote(it.name)}" }
         v.sourceFile?.let { fields += "\"sourceFile\": ${quote(it)}" }
         v.target?.let { fields += "\"target\": ${quote(it.name)}" }
@@ -72,6 +73,7 @@ object JsonReporter {
         fields += "\"message\": ${quote(v.message)}"
         fields += "\"fix\": ${quote(v.fix)}"
         v.hint?.let { fields += "\"hint\": ${quote(it)}" }
+        if (v.unlisted) fields += "\"unlisted\": true"
         return "{${fields.joinToString(", ")}}"
     }
 

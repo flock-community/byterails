@@ -3,6 +3,7 @@ package community.flock.byterails.check
 import community.flock.byterails.analysis.AnalyzedClass
 import community.flock.byterails.model.ClassName
 import community.flock.byterails.model.ConfigProblem
+import community.flock.byterails.model.DeclarationRole
 import community.flock.byterails.model.EffectiveRule
 import community.flock.byterails.model.ExclusiveGroup
 import community.flock.byterails.model.PackageDeclaration
@@ -11,6 +12,7 @@ import community.flock.byterails.model.ResolvedRuleSet
 import community.flock.byterails.model.Rule
 import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
+import community.flock.byterails.model.Severity
 import community.flock.byterails.rules.DefaultRuleSet
 import community.flock.byterails.rules.PredefinedRuleSet
 
@@ -40,7 +42,38 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
         val packageRules = violations.map { it.className.packageName }.distinct().sorted()
             .mapNotNull { packageName -> resolved.declarationFor(packageName)?.let { packageName to packageRules(it) } }
             .toMap()
-        return CheckResult(violations.sortedWith(ORDER), classCount, packages.size, warnings, ruleSet.module, packageRules)
+        val missing = missingBaseRules(violations)
+        val reported = if (missing == null) violations else violations.map { if (isStandardLibraryUse(it)) it.copy(unlisted = true) else it }
+        return CheckResult(reported.sortedWith(ORDER), classCount, packages.size, warnings + listOfNotNull(missing), ruleSet.module, packageRules)
+    }
+
+    /** True for a reference to the Java or Kotlin standard library that no rule allows. */
+    private fun isStandardLibraryUse(violation: Violation): Boolean =
+        violation.kind == ViolationKind.NOT_ALLOWED && violation.target?.let { target -> STANDARD_LIBRARIES.any { it.covers(target) } } == true
+
+    /**
+     * The warning that stands in for the uses of the Java and Kotlin standard libraries that no rule
+     * allows, when there are so many that the cause is the build and not the code: at least
+     * [UNLISTED_THRESHOLD] of them, in at least half of the classes that have rules. Null when they are
+     * few enough to be read, and are then listed like any other violation.
+     */
+    private fun missingBaseRules(violations: List<Violation>): ConfigProblem? {
+        val uses = violations.filter(::isStandardLibraryUse)
+        if (uses.size < UNLISTED_THRESHOLD) return null
+        val classes = uses.map { it.className }.distinct().size
+        val checked = violations.filter { it.kind != ViolationKind.UNDECLARED_PACKAGE && it.kind != ViolationKind.WRONG_MODULE }
+            .map { it.className }.distinct().size
+        if (classes * 2 < checked) return null
+        val kotlin = uses.any { use -> KOTLIN.any { it.covers(use.target!!) } }
+        val id = if (kotlin) "kotlin" else "java"
+        val library = if (kotlin) "the Kotlin and Java standard libraries" else "the Java standard library"
+        return ConfigProblem(
+            Severity.WARNING,
+            "${uses.size} violations in $classes ${if (classes == 1) "class" else "classes"} are not listed: they use $library, which no rule allows. " +
+                "Apply the $id base rules, baseRules \"$id\" in the build or $id() in the rules file, or allow the packages in the root block; " +
+                "the JSON report and the verbose output list every one",
+            null,
+        )
     }
 
     /** What a package may and may not use, rule by rule with where each was written. */
@@ -52,6 +85,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
         val declaration = resolved.declarationFor(cls.name.packageName)
             ?: return listOf(undeclared(cls))
         val owner = ownerOf(cls)
+        val slice = resolved.chain(declaration).lastOrNull { it.role == DeclarationRole.SLICE_ROOT }?.name
         val violations = mutableListOf<Violation>()
         naming(cls, declaration, owner)?.let { violations += it }
         val rules = resolved.effectiveRules(declaration)
@@ -66,7 +100,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
         for ((target, decision) in decisions) {
             if (decision != null) violations += violation(cls, owner, declaration, target, decision, occurrences.getValue(target))
         }
-        return violations
+        return if (slice == null) violations else violations.map { it.copy(slice = slice) }
     }
 
     /** What the rules say about a reference to [target] from a class under [declaration]; null when it is fine. */
@@ -104,7 +138,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
                 val texts = Messages.exclusive(cls.name, target, group.ownerDescription, group.owners[0].name, declared)
                 Violation(
                     ViolationKind.EXCLUSIVE, cls.name, target, ruleRef(group.rule, group.owners[0]), occurrences, emptyList(), declared, null,
-                    cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner,
+                    cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner, clause = texts.clause,
                 )
             }
             is Decision.Denied -> {
@@ -112,14 +146,14 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
                 val texts = Messages.denied(cls.name, target, rule)
                 Violation(
                     ViolationKind.DENIED, cls.name, target, rule, occurrences, emptyList(), declared, null,
-                    cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner,
+                    cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner, clause = texts.clause,
                 )
             }
             is Decision.NotAllowed -> {
                 val texts = Messages.notAllowed(cls.name, target, declared)
                 Violation(
                     ViolationKind.NOT_ALLOWED, cls.name, target, null, occurrences, decision.allows, declared, null,
-                    cls.sourceFile, texts.message, texts.headline, texts.fix, decision.hint, decision.ruleSets, owner,
+                    cls.sourceFile, texts.message, texts.headline, texts.fix, decision.hint, decision.ruleSets, owner, texts.clause,
                 )
             }
         }
@@ -133,7 +167,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
         return Violation(
             ViolationKind.NAMING, cls.name, null,
             RuleRef(naming.text, holder.name, naming.location, holder.text, ruleSetOf(holder)), emptyList(), emptyList(), null, null,
-            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner,
+            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = owner, clause = texts.clause,
         )
     }
 
@@ -154,7 +188,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
         val texts = Messages.wrongModule(cls.name, mismatch)
         return Violation(
             ViolationKind.WRONG_MODULE, cls.name, null, null, emptyList(), emptyList(), null, mismatch,
-            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = ownerOf(cls),
+            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = ownerOf(cls), clause = texts.clause,
         )
     }
 
@@ -166,7 +200,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
         val texts = Messages.undeclared(cls.name, nearest)
         return Violation(
             ViolationKind.UNDECLARED_PACKAGE, cls.name, null, null, emptyList(), emptyList(), nearest, null,
-            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = ownerOf(cls),
+            cls.sourceFile, texts.message, texts.headline, texts.fix, owner = ownerOf(cls), clause = texts.clause,
         )
     }
 
@@ -187,6 +221,14 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
     }
 
     private companion object {
+        /** Standard-library violations from this number on are replaced by one warning, when most classes have them. */
+        const val UNLISTED_THRESHOLD = 20
+
+        val KOTLIN: List<Prefix> = listOf(Prefix.parse("kotlin"), Prefix.parse("org.jetbrains.annotations"))
+
+        /** What the `java` and `kotlin` base rule sets are for: packages every class of the language references. */
+        val STANDARD_LIBRARIES: List<Prefix> = KOTLIN + Prefix.parse("java")
+
         /** References the compilers write into every class, which a first-time user has not thought about. */
         val HINTS: List<Pair<Prefix, String>> = listOf(
             Prefix.parse("org.jetbrains.annotations") to
