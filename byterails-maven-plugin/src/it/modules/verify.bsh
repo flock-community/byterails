@@ -3,14 +3,14 @@ import java.nio.file.*;
 
 String log = new String(Files.readAllBytes(new File(basedir, "build.log").toPath()), "UTF-8");
 String[] expected = {
-    "byterails: WRONG MODULE com.acme.orders belongs to module \"orders\", which owns com.acme.orders, but is compiled outside the modules",
+    "  WRONG MODULE belongs to module \"orders\", which owns com.acme.orders, but is compiled outside the modules",
     "  Stray.java  Stray",
-    "byterails: NOT ALLOWED  com.acme.customers.domain uses com.acme.orders.domain, which no rule allows",
+    "  NOT ALLOWED  uses com.acme.orders.domain, which no rule allows",
     "Customer.java  Customer uses Order in order",
     "may use  com.acme.orders.api, java.lang",
-    "byterails: EXCLUSIVE    com.acme.customers.domain uses java.util, which only com.acme.orders.domain may use",
+    "  EXCLUSIVE    uses java.util, which only com.acme.orders.domain may use",
     "rule     exclusive(\"java.util\") in pkg(\"com.acme.orders.domain\") at orders/byterails.kts:7",
-    "byterails: WRONG MODULE com.acme.shared is compiled in module \"customers\" but lies outside its package com.acme.customers",
+    "  WRONG MODULE is compiled in module \"customers\" but lies outside its package com.acme.customers",
     "  Misplaced.java  Misplaced",
     "byterails: 0 violations in 2 classes, 2 packages",
     "byterails: 0 violations in 1 class, 1 package"

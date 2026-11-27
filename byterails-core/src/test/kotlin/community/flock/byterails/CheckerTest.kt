@@ -71,6 +71,22 @@ class CheckerTest {
     }
 
     @Test
+    fun `without base rules the standard library uses are replaced by one warning`() {
+        val bare = Checker(community.flock.byterails.dsl.byterails { pkg("fixtures") }).check(ClassDirScanner.scan(Fixtures.classDirs))
+        val (unlisted, listed) = bare.violations.partition { it.unlisted }
+        assertTrue(unlisted.size >= 20, unlisted.size.toString())
+        assertTrue(unlisted.all { it.kind == ViolationKind.NOT_ALLOWED && it.target!!.name.matches(Regex("(java|kotlin|org\\.jetbrains\\.annotations)\\..*")) })
+        assertTrue(listed.none { it.target?.name?.startsWith("kotlin.") == true || it.target?.name?.startsWith("java.") == true })
+        val warning = bare.warnings.single().message
+        assertTrue(warning.startsWith("${unlisted.size} violations in "), warning)
+        assertTrue(warning.contains("are not listed: they use the Kotlin and Java standard libraries, which no rule allows"), warning)
+        assertTrue(warning.contains("baseRules \"kotlin\" in the build or kotlin() in the rules file"), warning)
+        // The rules of the fixtures allow the languages, so what is left is few and deliberate: listed, no warning.
+        assertTrue(result.warnings.none { it.message.contains("not listed") })
+        assertTrue(result.violations.none { it.unlisted })
+    }
+
+    @Test
     fun `a constant leaves no trace and therefore no violation`() {
         assertTrue(result.violations.none { it.targets("fixtures.lib.config.Constants") })
         assertTrue(result.violations.none { it.targets("fixtures.lib.config.JavaConstants") })

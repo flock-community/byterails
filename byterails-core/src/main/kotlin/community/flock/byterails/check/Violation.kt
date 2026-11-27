@@ -94,7 +94,7 @@ data class Violation(
     val message: String,
     /** The sentence every violation with the same root cause shares, naming the package: the console header. */
     val headline: String,
-    /** The two ways out, as one sentence. */
+    /** The change to the rules file that settles it. Moving the code always does too, so it is named only when it is the one way out or has a destination. */
     val fix: String,
     /** A pointer for references every compiler emits, so the first run on a Kotlin project explains itself. */
     val hint: String? = null,
@@ -102,6 +102,15 @@ data class Violation(
     val ruleSets: Map<String, String> = emptyMap(),
     /** The class a lambda or anonymous class was written in, when this class is one; null when the class is reported under its own name. */
     val owner: ClassName? = null,
+    /** The [headline] without its subject, for a reader who already knows the package: `uses java.io, which no rule allows`. */
+    val clause: String = headline,
+    /** The root of the slice the class lies in, `com.acme.orders`, or null for a class outside the slices. */
+    val slice: String? = null,
+    /**
+     * True when the console leaves this violation out because a warning stands in for it: a use of the
+     * Java or Kotlin standard library in a build that evidently has no base rules. It still counts.
+     */
+    val unlisted: Boolean = false,
 ) {
     /** The class this violation is reported under: [owner] when there is one, else the class itself. */
     val reportedClass: ClassName get() = owner ?: className

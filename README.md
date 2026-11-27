@@ -271,9 +271,10 @@ A violation names a module file by its path from the root, `orders/byterails.kts
 feature of the two plugins; the command line checks against one rules file.
 
 ```
-byterails: WRONG MODULE com.acme.shared is compiled in module "customers" but lies outside its package com.acme.customers
-  fix      move the classes under com.acme.customers, or into the project of the module that owns them
-  Misplaced.java  Misplaced
+byterails: package com.acme.shared: 1 violation
+  WRONG MODULE is compiled in module "customers" but lies outside its package com.acme.customers
+    fix      move the classes under com.acme.customers, or into the project of the module that owns them
+    Misplaced.java  Misplaced
 ```
 
 Maven takes the module in the plugin configuration of the module's POM:
@@ -385,16 +386,19 @@ The language baseline is what a class needs to exist plus the value types a doma
 rules are applied; with `java` or `kotlin` as base rules the domain may use the whole standard library.
 
 A violation reads like any other, except that allows coming from a rule set show as one token, the
-package row names the set, and the run ends with a legend that spells the token out. Here
+`declared` row names the set, and the run ends with a legend that spells the token out. Here
 `com.acme.sales.domain.Leak` holds a `java.net.URI` and no base rules are applied; with `java` or
 `kotlin` as base rules the domain may use the whole standard library and this passes:
 
 ```
-byterails: NOT ALLOWED  com.acme.sales.domain uses java.net, which no rule allows
-  package  pkg("com.acme.sales.domain") from the hexagonal rule set, isolated
+byterails: slice com.acme.sales: 1 violation in 1 package
+
+byterails: package com.acme.sales.domain: 1 violation
+  declared pkg("com.acme.sales.domain") from the hexagonal rule set, isolated
   may use  [hexagonal]
-  fix      move the code; pkg("com.acme.sales.domain") comes from the hexagonal rule set and is isolated, so the rules file cannot widen it
-  Leak.java  Leak uses URI in endpoint
+  NOT ALLOWED  uses java.net, which no rule allows
+    fix      move the code; pkg("com.acme.sales.domain") comes from the hexagonal rule set and is isolated, so the rules file cannot widen it
+    Leak.java  Leak uses URI in endpoint
 
 byterails: [hexagonal] stands for the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text
 ```
@@ -605,30 +609,41 @@ the classes, a rules file or a setting changes.
 
 ### Reading a violation
 
-Every violation prints as a sentence with the package as its subject, followed by what a developer
-needs to act: the block of the rules file it concerns with its line, what the package may use, a `fix`
-row naming both ways out, and one line per class that starts with the source location and names the
-members involved. Violations with the same cause, that is the same package, kind, referenced package
-and deciding rule, form one block, because they are one line to change in the rules file or one piece
-of code to move. A violation is one class and one referenced type: members the compiler generated,
-such as property accessors, record methods and lambda bodies, fold into the member the developer
-wrote, and a lambda or anonymous class is reported under the class and method it was written in.
-Undeclared packages are one table for the run.
+The output follows where a violation comes from: a heading per slice, under it a heading per package,
+and under that one block per cause. The package heading says once what its blocks share: the block of
+the rules file that declares the package, with its line, and what the package may use. A block is a
+sentence about the package, a `fix` row naming the change to the rules file that would settle it (moving the code is always the other way out, so it is not repeated), and one line per class that starts with
+the source location and names the members involved. Violations with the same cause, that is the same
+package, kind, referenced package and deciding rule, form one block, because they are one line to
+change in the rules file or one piece of code to move. A violation is one class and one referenced
+type: members the compiler generated, such as property accessors, record methods and lambda bodies,
+fold into the member the developer wrote, and a lambda or anonymous class is reported under the class
+and method it was written in. Undeclared packages are one table for the run.
 
 ```
-byterails: NOT ALLOWED  com.acme.domain uses org.springframework.web.client, which no rule allows
-  package  pkg("com.acme.domain") at byterails.kts:12
+byterails: package com.acme.domain: 3 violations
+  declared pkg("com.acme.domain") at byterails.kts:12
   may use  java.lang, java.time, java.util, kotlin, org.jetbrains.annotations
-  fix      move the code, or add allow("org.springframework.web.client") to pkg("com.acme.domain")
-  OrderService.kt:42  OrderService uses RestTemplate in place
-  Shipping.kt         Shipping uses RestClient in client
-
-byterails: DENIED       com.acme.domain uses jakarta.persistence, which deny("jakarta.persistence") forbids
-  rule     deny("jakarta.persistence") in pkg("com.acme.domain") at byterails.kts:14
-  fix      move the code, or lift the deny
-  Order.kt  Order uses EntityManager in entityManager
+  NOT ALLOWED  uses org.springframework.web.client, which no rule allows
+    fix      add allow("org.springframework.web.client") to pkg("com.acme.domain")
+    OrderService.kt:42  OrderService uses RestTemplate in place
+    Shipping.kt         Shipping uses RestClient in client
+  DENIED       uses jakarta.persistence, which deny("jakarta.persistence") forbids
+    rule     deny("jakarta.persistence") in pkg("com.acme.domain") at byterails.kts:14
+    fix      lift the deny
+    Order.kt  Order uses EntityManager in entityManager
 
 byterails: 3 violations in 2 groups, 1,204 classes, 17 packages
+```
+
+With [slices](#slices) configured, the packages of a slice follow a line that names the slice and
+counts what is under it, and the packages outside the slices come first under `outside the slices`:
+
+```
+byterails: slice com.acme.orders: 7 violations in 2 packages
+
+byterails: package com.acme.orders.domain: 5 violations
+  ...
 ```
 
 The kinds: `UNDECLARED` for a class in a package no declaration covers, `WRONG MODULE` for a class
@@ -637,7 +652,17 @@ compiled in the wrong [module](#modules), `NOT ALLOWED` when no rule allows the 
 name that matches no pattern. `may use` lists the allows in effect for the package, its own and the
 inherited ones; the package's own subtree is always allowed and is not listed. A `hint` row follows the
 fix when the reference is one every compiler emits, `kotlin`, `java.lang` or
-`org.jetbrains.annotations`, so a first run on a project without those root allows explains itself.
+`org.jetbrains.annotations`.
+
+A build without [base rules](#base-rules) and without root allows for the language has such a
+reference in every class. When there are twenty or more uses of `java`, `kotlin` or
+`org.jetbrains.annotations` that no rule allows, in at least half of the classes that have rules, the
+console leaves them out and one warning stands in for them. They still count, and still fail the build:
+
+```
+byterails: warning: 1834 violations in 212 classes are not listed: they use the Kotlin and Java standard libraries, which no rule allows. Apply the kotlin base rules, baseRules "kotlin" in the build or kotlin() in the rules file, or allow the packages in the root block; the JSON report and the verbose output list every one
+byterails: 1,837 violations (1,834 not listed) in 2 groups, 212 classes, 17 packages, 1 warning
+```
 
 The undeclared packages of a run come first, as one table with the number of classes and the source
 files of each package, and a note when a flat declaration sits just above it:
@@ -654,8 +679,8 @@ report a class as a whole. A block shows at most ten lines, a line names at most
 six line numbers, and the undeclared table shows at most twenty packages; what was left out is
 announced with the switch that prints it. The JSON report under
 `build/reports/byterails/violations.json` holds every reference, one entry per class and referenced
-type with every site under `sites` (schema 2), next to the counts and the warnings, and so does the
-verbose output. `-Pbyterails.verbose=true`, or `byterails { verbose.set(true) }`, prints the settings
+type with every site under `sites` (schema 2), the `slice` it lies in and `"unlisted": true` when the
+console left it out, next to the counts and the warnings, and so does the verbose output. `-Pbyterails.verbose=true`, or `byterails { verbose.set(true) }`, prints the settings
 of the run, every reference on a line of its own with the fully qualified names and the JVM descriptor
 as they stand in the class file, and the rules in effect for every package that has a violation. The
 same lines are logged at Gradle's info level, so `--info` shows them too. A failing task ends with the
