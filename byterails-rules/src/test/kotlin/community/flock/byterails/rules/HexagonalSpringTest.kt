@@ -69,9 +69,11 @@ class HexagonalSpringTest {
     fun `the domain is isolated and flat and allows the standard libraries and stereotypes`() {
         val model = declaration("com.acme.orders.domain.model")
         assertTrue(model.isolated && model.flat)
-        assertEquals(HexagonalSpring.DOMAIN_BASELINE, effective("com.acme.orders.domain.model").map { it.prefix.name })
+        // The kotlin set applied next to the layout reaches the isolated domain too.
+        val kotlin = listOf("kotlin", "org.jetbrains.annotations") + Java.STANDARD_LIBRARY
+        assertEquals(kotlin + HexagonalSpring.DOMAIN_BASELINE, effective("com.acme.orders.domain.model").map { it.prefix.name })
         assertEquals(
-            HexagonalSpring.DOMAIN_BASELINE + "com.acme.orders.domain.model" + "com.acme.orders.domain.ports",
+            kotlin + HexagonalSpring.DOMAIN_BASELINE + "com.acme.orders.domain.model" + "com.acme.orders.domain.ports",
             effective("com.acme.orders.domain.services").map { it.prefix.name },
         )
         assertEquals(listOf("endsWith(\"Port\")", "endsWith(\"PortKt\")"), declaration("com.acme.orders.domain.ports").naming?.patterns?.map { it.text })

@@ -158,6 +158,28 @@ class ModulesTest {
     }
 
     @Test
+    fun `the root rules of a module's default set reach its isolated packages, the module file's own do not`() {
+        val baseline = object : DefaultRuleSet("baseline", "a baseline", "is the baseline") {
+            override fun ByterailsBuilder.rules() {
+                allow("org.jetbrains.annotations")
+            }
+        }.build()
+        val orders = ModuleRules(
+            "orders",
+            byterails {
+                allow("org.slf4j")
+                pkg("core") {
+                    isolated()
+                    allow("java.time")
+                }
+            }.including(baseline, sliced = false),
+        )
+        val withBaseline = root.withModules(listOf(orders), "orders").withBasePackage("com.acme")
+        val core = withBaseline.packages.first { it.name == "com.acme.orders.core" }
+        assertEquals(listOf("org.jetbrains.annotations", "java.time"), ResolvedRuleSet(withBaseline).effectiveRules(core).map { it.rule.prefix.name })
+    }
+
+    @Test
     fun `configuration errors name the module`() {
         fun error(block: () -> Unit) = assertFailsWith<ConfigException>(block = block).message!!
 

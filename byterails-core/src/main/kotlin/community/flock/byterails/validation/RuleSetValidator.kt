@@ -105,7 +105,8 @@ object RuleSetValidator {
         }
         for (declaration in resolved.declarations) {
             val enclosingDenies = if (declaration.isolated) {
-                declaration.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, declaration) }
+                resolved.defaultRootRules(declaration).filter { it.rule.kind == RuleKind.DENY } +
+                    declaration.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, declaration) }
             } else {
                 rootDenies + resolved.chain(declaration).flatMap { enclosing ->
                     enclosing.rules.filter { it.kind == RuleKind.DENY }.map { EffectiveRule(it, enclosing) }

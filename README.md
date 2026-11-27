@@ -117,7 +117,7 @@ byterails {
 | Inheritance | A package's effective rules are its own plus those of every enclosing declaration and the root block. A child may add allows and may deny what it inherited. `isolated()` and `flat()` cut the chain, as described below. |
 | Matching | Prefixes match on dot boundaries: `com.acme.domain` covers `com.acme.domain.model`, not `com.acme.domainservice`. A prefix may name a class: `deny("java.lang.System")` covers that class and its nested classes. |
 | `naming { }` | Patterns on the simple class name: `endsWith("x")`, `startsWith("x")` and `matches("regex")`, where the regular expression must match the whole name. A class passes when one pattern matches. A declaration takes one naming block, and a package without one uses that of the nearest enclosing declaration. Nested classes, compiler-generated classes, `package-info` and classes carrying an annotation named `Generated` that is kept in the class file are skipped. |
-| `isolated()` | Inherit nothing, not even the root block: classes in this subtree may reference only what the block itself lists, and the subtree. |
+| `isolated()` | Inherit nothing the rules file wrote, not even the root block: classes in this subtree may reference only what the block itself lists, and the subtree. The root rules of a default rule set still apply, so with `kotlin` or `java` applied an isolated package may use the standard library without listing it. |
 | `flat()` | The package itself only: a class in a sub-package is undeclared unless another declaration covers it, and such a declaration inherits neither rules nor naming from the flat one. |
 | `basePackage { }` | The base package itself, as configured in the build; usually `flat()`, so it holds the entry point and its siblings stay separate subtrees. |
 | `allowAnything()` | Classes in this subtree may reference anything at all, short of what the root block denies and what another package owns. For the entry point and the wiring. |
@@ -335,7 +335,7 @@ Maven.
 | --- | --- | --- |
 | `java` | The Java standard library, allowed in every package: the whole `java` namespace, the `javax` and `com.sun` packages JDK 21 itself exports, the `jdk` namespace, `netscape.javascript`, and the W3C DOM, SAX and JGSS packages. Not `javax` as a whole, because `javax.persistence`, `javax.inject` and friends are libraries, not the JDK. | Nothing by itself; it is the grant every Java project needs, so the rules file only has to say what is specific to the application. |
 | `kotlin` | The Kotlin standard library, allowed in every package: `kotlin`, the `org.jetbrains.annotations` the compiler writes into every class, and everything the `java` set allows, because Kotlin's collections, strings and boxed numbers compile to `java.util` and `java.lang`. | Nothing by itself; a Kotlin project needs no other root allows. |
-| `hexagonal` | A `domain` package that cannot have any external dependency. With slices configured, one in every slice; without, one under the base package. The package is *isolated*: it inherits nothing from the root block or an enclosing declaration, and may reference only the language baseline and its own subtree. | Any class in `domain` that touches a framework, a library, an adapter or another package of the application, whatever the rest of the rules file allows. |
+| `hexagonal` | A `domain` package that cannot have any external dependency. With slices configured, one in every slice; without, one under the base package. The package is *isolated*: it inherits nothing the rules file wrote in the root block or an enclosing declaration, and may reference only the language baseline and its own subtree, plus the standard library when `java` or `kotlin` is applied as well. | Any class in `domain` that touches a framework, a library, an adapter or another package of the application, whatever the rest of the rules file allows. |
 | `hexagonalSpring` | The hexagonal layout of a vertically sliced Spring Boot service: the application class and a `config` package under the base package, and in every slice an isolated `domain` split into `model`, `ports` and `services`, an `application` layer, and `adapters.inbound` and `adapters.outbound` with fixed places for controllers and database code. See [The hexagonalSpring layout](#the-hexagonalspring-layout). | A package outside the layout, a dependency pointing outwards, a `@Configuration` outside `config`, a Spring web annotation outside `controllers`, a controller using more of Spring than HTTP needs, persistence code outside `adapters.outbound.database`, a misnamed port, service or configuration class. |
 
 The language baseline is what a class needs to exist plus the value types a domain model is made of:
@@ -348,7 +348,8 @@ never reports a rule-set allow as dead.
 
 A violation reads like any other, except that allows coming from a rule set show as one token, the
 package row names the set, and the run ends with a legend that spells the token out. Here
-`com.acme.sales.domain.Leak` holds a `java.net.URI`:
+`com.acme.sales.domain.Leak` holds a `java.net.URI` and `hexagonal` is the only set applied; with
+`java` or `kotlin` next to it the domain may use the whole standard library and this passes:
 
 ```
 byterails: NOT ALLOWED  com.acme.sales.domain uses java.net, which no rule allows
@@ -515,7 +516,7 @@ available on any package:
 
 ```kotlin
 pkg("domain") {
-    isolated()          // inherit nothing, not even the root block
+    isolated()          // inherit nothing but the default rules, not even the root block
     allow("kotlin")     // then list exactly what this package may use
     allow("java.lang")
 }

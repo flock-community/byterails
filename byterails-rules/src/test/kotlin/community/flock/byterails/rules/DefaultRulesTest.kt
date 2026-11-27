@@ -11,6 +11,7 @@ import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.model.withBasePackage
 import community.flock.byterails.model.withSlices
+import community.flock.byterails.validation.RuleSetValidator
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -55,6 +56,29 @@ class DefaultRulesTest {
         assertTrue(domain.isolated)
         val effective = ResolvedRuleSet(rules).effectiveRules(domain).map { it.rule.prefix.name }
         assertEquals(LANGUAGE_BASELINE, effective)
+    }
+
+    @Test
+    fun `the root rules of a default set reach an isolated package, the rules file's own do not`() {
+        val rules = byterails {
+            kotlin()
+            allow("org.springframework")
+            pkg("com.acme") {
+                allow("org.jooq")
+            }
+            pkg("core") {
+                isolated()
+                allow("org.slf4j")
+            }
+            hexagonal()
+        }.withBasePackage("com.acme")
+        val resolved = ResolvedRuleSet(rules)
+        val standardLibrary = listOf("kotlin", "org.jetbrains.annotations") + Java.STANDARD_LIBRARY
+        val core = rules.packages.first { it.name == "com.acme.core" }
+        assertEquals(standardLibrary + "org.slf4j", resolved.effectiveRules(core).map { it.rule.prefix.name })
+        val domain = rules.packages.first { it.name == "com.acme.domain" }
+        assertEquals(standardLibrary + LANGUAGE_BASELINE, resolved.effectiveRules(domain).map { it.rule.prefix.name })
+        assertEquals(emptyList(), RuleSetValidator.validate(rules))
     }
 
     @Test

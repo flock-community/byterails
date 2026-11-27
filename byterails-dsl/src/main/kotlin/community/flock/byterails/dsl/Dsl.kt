@@ -186,8 +186,9 @@ class PackageBuilder internal constructor(
     private var flat = false
 
     /**
-     * Inherit nothing: not the root block, not enclosing declarations. Classes in this subtree may
-     * reference only what this block lists and the subtree itself.
+     * Inherit nothing the rules file wrote: not the root block, not enclosing declarations. Classes in
+     * this subtree may reference only what this block lists, the subtree itself, and what the root
+     * rules of the default rule sets grant, such as the standard library of `kotlin`.
      */
     fun isolated() {
         isolated = true

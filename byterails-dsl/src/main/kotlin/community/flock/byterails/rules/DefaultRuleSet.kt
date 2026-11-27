@@ -61,7 +61,7 @@ abstract class DefaultRuleSet(
     override fun toString(): String = id
 
     companion object {
-        const val GROUP = "default:"
+        const val GROUP = Rule.DEFAULT_GROUP
 
         /** Every rule set on the classpath, in the order the providers list them. */
         val all: List<DefaultRuleSet> by lazy {

@@ -35,8 +35,12 @@ data class Rule(
 
     val isExported: Boolean get() = group?.startsWith(EXPORTED_GROUP) == true
 
+    /** True for a rule that came from a default rule set rather than from a rules file. */
+    val isDefault: Boolean get() = group?.startsWith(DEFAULT_GROUP) == true
+
     companion object {
         const val EXPORTED_GROUP = "exported:"
+        const val DEFAULT_GROUP = "default:"
     }
 }
 
@@ -72,9 +76,10 @@ data class NamingRules(val patterns: List<NamePattern>, val location: SourceLoca
 /**
  * A declared package subtree with its own rules.
  *
- * An [isolated] declaration inherits nothing: not the root block, not its enclosing declarations.
- * Its classes may reference only what the declaration itself lists and its own subtree, which is
- * how a domain package is kept free of every external dependency whatever the rest of the file allows.
+ * An [isolated] declaration inherits nothing a rules file wrote: not the root block, not its enclosing
+ * declarations. Its classes may reference only what the declaration itself lists, its own subtree and
+ * what the root rules of the default rule sets grant, such as the standard library of `kotlin`, which
+ * is how a domain package is kept free of every external dependency whatever the rest of the file allows.
  *
  * A [flat] declaration covers the package itself and nothing beneath it: a class in a sub-package
  * is undeclared unless another declaration covers it, and the flat declaration neither encloses

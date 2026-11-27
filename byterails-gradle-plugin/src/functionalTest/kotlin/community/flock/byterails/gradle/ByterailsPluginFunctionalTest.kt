@@ -209,21 +209,26 @@ class ByterailsPluginFunctionalTest {
             null,
             "com/acme/sales/domain/Sale.java" to """
                 package com.acme.sales.domain;
-                public class Sale { java.util.List<String> lines; java.math.BigDecimal total; }
+                public class Sale { java.util.List<String> lines; java.math.BigDecimal total; java.net.URI viaTheJavaSet; }
             """,
             "com/acme/sales/domain/Leak.java" to """
                 package com.acme.sales.domain;
-                public class Leak { java.net.URI endpoint; }
+                public class Leak { com.acme.sales.Gateway gateway; }
+            """,
+            "com/acme/sales/Gateway.java" to """
+                package com.acme.sales;
+                public class Gateway {}
             """,
             extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\"))\n    defaultRules.set(listOf(\"java\", \"hexagonal\"))",
         )
         val result = runner(dir).buildAndFail()
-        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.sales.domain uses java.net, which no rule allows"), result.output)
+        assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.sales.domain uses com.acme.sales, which no rule allows"), result.output)
         assertTrue(result.output.contains("package  pkg(\"com.acme.sales.domain\") from the hexagonal rule set, isolated"), result.output)
-        assertTrue(result.output.contains("may use  [hexagonal]"), result.output)
-        assertTrue(result.output.contains("Leak.java  Leak uses URI in endpoint"), result.output)
+        assertTrue(result.output.contains("may use  [hexagonal], [java]"), result.output)
+        assertTrue(result.output.contains("Leak.java  Leak uses Gateway in gateway"), result.output)
+        assertTrue(!result.output.contains("viaTheJavaSet"), "the java set reaches the isolated domain: " + result.output)
         assertTrue(result.output.contains("byterails: [hexagonal] stands for the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text"), result.output)
-        assertTrue(result.output.contains("byterails: 1 violation in 1 group, 2 classes, 1 package"), result.output)
+        assertTrue(result.output.contains("byterails: 1 violation in 1 group, 3 classes, 2 packages"), result.output)
 
         val without = project(null, "com/acme/sales/domain/Sale.java" to "package com.acme.sales.domain; public class Sale {}")
         val missing = runner(without).buildAndFail()
