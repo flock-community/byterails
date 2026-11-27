@@ -86,12 +86,6 @@ jobs:
         if: github.event.inputs.components != 'gradle' && env.MAVEN_PUBLISHED != 'true'
         run: ./gradlew -Pversion="$VERSION" --no-configuration-cache publishToMavenLocal
 
-      - name: Import GPG key
-        if: github.event.inputs.components != 'gradle' && env.MAVEN_PUBLISHED != 'true'
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-
       - name: Maven settings
         if: github.event.inputs.components != 'gradle' && env.MAVEN_PUBLISHED != 'true'
         run: |
@@ -113,5 +107,7 @@ jobs:
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          # The Maven GPG plugin signs in the JVM with this key; see the release profile of the plugin's POM.
+          MAVEN_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: mvn -B -f byterails-maven-plugin/pom.xml -Drevision="$VERSION" -Prelease deploy

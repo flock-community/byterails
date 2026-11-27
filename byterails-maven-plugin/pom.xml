@@ -192,11 +192,12 @@
             <artifactId>maven-gpg-plugin</artifactId>
             <version>3.2.8</version>
             <configuration>
-              <!-- The passphrase comes from MAVEN_GPG_PASSPHRASE; loopback lets gpg read it without a terminal. -->
-              <gpgArguments>
-                <arg>--pinentry-mode</arg>
-                <arg>loopback</arg>
-              </gpgArguments>
+              <!--
+                Signs in the JVM, as the Gradle build does, instead of calling the gpg of the machine: the key
+                comes from MAVEN_GPG_KEY (ASCII-armored) and its passphrase from MAVEN_GPG_PASSPHRASE. Nothing
+                is imported into a keyring, so the gpg version of the runner image does not matter.
+              -->
+              <signer>bc</signer>
             </configuration>
             <executions>
               <execution>
