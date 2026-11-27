@@ -3,13 +3,13 @@ package community.flock.byterails.rules
 import community.flock.byterails.dsl.ByterailsBuilder
 
 /**
- * The `java` rule set: the Java standard library, allowed in every package.
+ * The `java` base rule set: the Java standard library, allowed in every package, an isolated one included.
  *
  * That is the `java` namespace, the `javax` and `com.sun` packages the JDK itself exports, the `jdk`
  * namespace, and the W3C DOM, SAX and JGSS packages. Not `javax` as a whole, because
  * `javax.persistence`, `javax.inject` and friends are libraries, not the JDK.
  */
-object Java : DefaultRuleSet(
+object Java : BaseRuleSet(
     id = "java",
     description = "the Java standard library, allowed in every package",
     allowsLabel = "the Java standard library",
@@ -61,5 +61,5 @@ object Java : DefaultRuleSet(
     )
 }
 
-/** The `java` default rules: the Java standard library, allowed in every package. */
+/** The `java` base rules: the Java standard library, allowed in every package. */
 fun ByterailsBuilder.java() = include(Java.build())

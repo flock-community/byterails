@@ -6,7 +6,7 @@ plugins {
     `maven-publish`
 }
 
-description = "byterails DSL: the rule model, the byterails { } DSL, the default rule set API and the byterails.kts script definition"
+description = "byterails DSL: the rule model, the byterails { } DSL, the base and default rule set API and the byterails.kts script definition"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17

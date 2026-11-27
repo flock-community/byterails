@@ -219,20 +219,20 @@ class ByterailsPluginFunctionalTest {
                 package com.acme.sales;
                 public class Gateway {}
             """,
-            extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\"))\n    defaultRules.set(listOf(\"java\", \"hexagonal\"))",
+            extra = "basePackage.set(\"com.acme\")\n    slices.set(listOf(\"sales\"))\n    baseRules.set(listOf(\"java\"))\n    defaultRules.set(listOf(\"hexagonal\"))",
         )
         val result = runner(dir).buildAndFail()
         assertTrue(result.output.contains("byterails: NOT ALLOWED  com.acme.sales.domain uses com.acme.sales, which no rule allows"), result.output)
         assertTrue(result.output.contains("package  pkg(\"com.acme.sales.domain\") from the hexagonal rule set, isolated"), result.output)
         assertTrue(result.output.contains("may use  [hexagonal], [java]"), result.output)
         assertTrue(result.output.contains("Leak.java  Leak uses Gateway in gateway"), result.output)
-        assertTrue(!result.output.contains("viaTheJavaSet"), "the java set reaches the isolated domain: " + result.output)
+        assertTrue(!result.output.contains("viaTheJavaSet"), "the java base rules reach the isolated domain: " + result.output)
         assertTrue(result.output.contains("byterails: [hexagonal] stands for the language baseline: kotlin, org.jetbrains.annotations, java.lang, java.util, java.time, java.math, java.text"), result.output)
         assertTrue(result.output.contains("byterails: 1 violation in 1 group, 3 classes, 2 packages"), result.output)
 
         val without = project(null, "com/acme/sales/domain/Sale.java" to "package com.acme.sales.domain; public class Sale {}")
         val missing = runner(without).buildAndFail()
-        assertTrue(missing.output.contains("does not exist and no defaultRules are set"), missing.output)
+        assertTrue(missing.output.contains("does not exist and no baseRules or defaultRules are set"), missing.output)
     }
 
     /** A build with modules: the root project sets the base package, three subprojects, two of them modules. */

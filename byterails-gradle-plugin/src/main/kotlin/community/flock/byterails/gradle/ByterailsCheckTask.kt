@@ -59,6 +59,9 @@ abstract class ByterailsCheckTask : DefaultTask() {
     @get:Input
     abstract val defaultRules: ListProperty<String>
 
+    @get:Input
+    abstract val baseRules: ListProperty<String>
+
     /** The module this project is, or absent for a project outside the modules. */
     @get:Input
     @get:Optional
@@ -87,9 +90,9 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val rules = rulesFile.orNull?.asFile
         val moduleSpecs = modules.get()
         val currentModule = module.orNull?.trim()?.takeIf { it.isNotEmpty() }
-        if (rules == null && defaultRules.get().isEmpty() && moduleSpecs.isEmpty()) {
+        if (rules == null && defaultRules.get().isEmpty() && baseRules.get().isEmpty() && moduleSpecs.isEmpty()) {
             throw GradleException(
-                "byterails: the rules file ${rulesFileConfigured.get()} does not exist and no defaultRules are set; add the file or set byterails { defaultRules }",
+                "byterails: the rules file ${rulesFileConfigured.get()} does not exist and no baseRules or defaultRules are set; add the file or set byterails { baseRules } or byterails { defaultRules }",
             )
         }
         if (currentModule == null) {
@@ -104,7 +107,7 @@ abstract class ByterailsCheckTask : DefaultTask() {
         val base = basePackage.orNull
         val showDetail = verbose.get()
         val violations = ToolRunner.run(
-            toolClasspath.files, rules, dirs, report, cache, base, slices.get(), defaultRules.get(),
+            toolClasspath.files, rules, dirs, report, cache, base, slices.get(), defaultRules.get(), baseRules.get(),
             rootDir.get().asFile, currentModule, moduleSpecs, showDetail,
             { line -> logger.lifecycle(line) },
             { line -> if (showDetail) logger.lifecycle(line) else logger.info(line) },

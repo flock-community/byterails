@@ -6,7 +6,7 @@ plugins {
     `maven-publish`
 }
 
-description = "byterails default rules: the java, kotlin, hexagonal and hexagonalSpring rule sets, written with the byterails DSL"
+description = "byterails rule sets: the java and kotlin base rules and the hexagonal and hexagonalSpring default rules, written with the byterails DSL"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17

@@ -10,7 +10,7 @@ import java.io.Serializable
 
 /**
  * One module of the build as the check task sees it: the module's name, its rules file when it has
- * one, and the slices and default rules configured on its project. The rules file is a task input,
+ * one, and the slices, base rules and default rules configured on its project. The rules file is a task input,
  * so a change in any module's file re-runs every module's check.
  */
 class ModuleSpec(
@@ -18,6 +18,7 @@ class ModuleSpec(
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.NONE) val rulesFile: File?,
     @get:Input val slices: List<String>,
     @get:Input val defaultRules: List<String>,
+    @get:Input val baseRules: List<String> = emptyList(),
 ) : Serializable {
 
     /** The module as JDK types, for the runner behind the class loader boundary. */
@@ -26,6 +27,7 @@ class ModuleSpec(
         put("rulesFile", rulesFile)
         put("slices", java.util.ArrayList(slices))
         put("defaultRules", java.util.ArrayList(defaultRules))
+        put("baseRules", java.util.ArrayList(baseRules))
     }
 
     override fun toString(): String = "module $name"

@@ -53,12 +53,12 @@ class ResolvedRuleSet(val ruleSet: RuleSet) {
 
     /**
      * Root rules first, then the rules of each enclosing declaration from the outermost in.
-     * An isolated declaration gets the default root rules and its own rules only.
+     * An isolated declaration gets the base rules and its own rules only.
      */
     fun effectiveRules(declaration: PackageDeclaration): List<EffectiveRule> =
         effectiveRulesByDeclaration.getOrPut(declaration) {
             if (declaration.isolated) {
-                defaultRootRules(declaration) + declaration.rules.map { EffectiveRule(it, declaration) }
+                baseRules(declaration) + declaration.rules.map { EffectiveRule(it, declaration) }
             } else {
                 ruleSet.rootRules.map { EffectiveRule(it, null) } +
                     chain(declaration).flatMap { enclosing -> enclosing.rules.map { EffectiveRule(it, enclosing) } }
@@ -66,15 +66,15 @@ class ResolvedRuleSet(val ruleSet: RuleSet) {
         }
 
     /**
-     * The root rules of the default rule sets, which reach every package, an isolated one included:
-     * those in the root block, and those in the root of the module [declaration] belongs to, where
-     * the root rules of a module's own default sets live.
+     * The rules of the base rule sets, which reach every package, an isolated one included: those in
+     * the root block, and those in the root of the module [declaration] belongs to, where the base
+     * rules configured on a module live.
      */
-    fun defaultRootRules(declaration: PackageDeclaration): List<EffectiveRule> =
-        ruleSet.rootRules.filter { it.isDefault }.map { EffectiveRule(it, null) } +
+    fun baseRules(declaration: PackageDeclaration): List<EffectiveRule> =
+        ruleSet.rootRules.filter { it.isBase }.map { EffectiveRule(it, null) } +
             chain(declaration)
                 .filter { it !== declaration && it.role == DeclarationRole.MODULE_ROOT }
-                .flatMap { root -> root.rules.filter { it.isDefault }.map { EffectiveRule(it, root) } }
+                .flatMap { root -> root.rules.filter { it.isBase }.map { EffectiveRule(it, root) } }
 
     /** True when [declaration] lies inside a subtree owned by [group]. */
     fun isInside(declaration: PackageDeclaration?, group: ExclusiveGroup): Boolean =

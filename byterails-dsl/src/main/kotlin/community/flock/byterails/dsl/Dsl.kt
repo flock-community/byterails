@@ -35,7 +35,7 @@ fun byterails(block: ByterailsBuilder.() -> Unit): RuleSet {
 
 /**
  * @param group the group every rule written through this builder carries, or null for a rules file.
- *   The default rule sets are written with this builder and stamp their rules with `default:<id>`.
+ *   The base and default rule sets are written with this builder and stamp their rules with `base:<id>` or `default:<id>`.
  */
 @ByterailsDsl
 class ByterailsBuilder internal constructor(private val group: String? = null) {
@@ -104,7 +104,7 @@ class ByterailsBuilder internal constructor(private val group: String? = null) {
     }
 
     /**
-     * Adds a rule set written with this DSL, which is how the default rule sets are applied. Its root
+     * Adds a rule set written with this DSL, which is how the base and default rule sets are applied. Its root
      * rules join the root block, its declarations go under the base package, and its `slice { }`
      * packages go into this file's `slice { }` block when there is one and under the base package
      * otherwise. Applied at [build], so it does not matter where in the file it is called.
@@ -186,9 +186,9 @@ class PackageBuilder internal constructor(
     private var flat = false
 
     /**
-     * Inherit nothing the rules file wrote: not the root block, not enclosing declarations. Classes in
-     * this subtree may reference only what this block lists, the subtree itself, and what the root
-     * rules of the default rule sets grant, such as the standard library of `kotlin`.
+     * Inherit nothing: not the root block, not enclosing declarations. Classes in this subtree may
+     * reference only what this block lists, the subtree itself, and what the base rules grant, such
+     * as the standard library of `kotlin`.
      */
     fun isolated() {
         isolated = true

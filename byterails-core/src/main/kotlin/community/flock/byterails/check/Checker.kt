@@ -12,6 +12,7 @@ import community.flock.byterails.model.Rule
 import community.flock.byterails.model.RuleKind
 import community.flock.byterails.model.RuleSet
 import community.flock.byterails.rules.DefaultRuleSet
+import community.flock.byterails.rules.PredefinedRuleSet
 
 /**
  * Evaluates analysed classes against a rule set.
@@ -77,9 +78,9 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
             ?.let { return Decision.Denied(it) }
         if (rules.any { it.rule.kind != RuleKind.DENY && it.rule.prefix.covers(target) }) return null
         val granted = rules.filter { it.rule.kind != RuleKind.DENY }
-        val sets = granted.mapNotNull { DefaultRuleSet.of(it.rule) }.distinct()
+        val sets = granted.mapNotNull { PredefinedRuleSet.of(it.rule) }.distinct()
         val allows = granted
-            .map { effective -> DefaultRuleSet.of(effective.rule)?.let { "[${it.id}]" } ?: effective.rule.prefix.name }
+            .map { effective -> PredefinedRuleSet.of(effective.rule)?.let { "[${it.id}]" } ?: effective.rule.prefix.name }
             .distinct()
             .sorted()
         return Decision.NotAllowed(allows, sets.associate { it.id to it.allowsLabel }, HINTS.firstOrNull { (prefix, _) -> prefix.covers(target) }?.second)
@@ -170,7 +171,7 @@ class Checker(private val ruleSet: RuleSet, private val warnings: List<ConfigPro
     }
 
     private fun ruleRef(rule: Rule, origin: PackageDeclaration?) =
-        RuleRef(rule.text, origin?.name, rule.location, origin?.text, DefaultRuleSet.of(rule)?.id)
+        RuleRef(rule.text, origin?.name, rule.location, origin?.text, PredefinedRuleSet.of(rule)?.id)
 
     private fun declarationRef(declaration: PackageDeclaration) =
         DeclarationRef(declaration.name, declaration.text, declaration.location, declaration.flat, declaration.isolated, ruleSetOf(declaration))

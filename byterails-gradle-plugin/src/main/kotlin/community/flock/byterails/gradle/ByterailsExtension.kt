@@ -10,7 +10,7 @@ abstract class ByterailsExtension {
 
     /**
      * The rules file. Defaults to `byterails.kts` in the root project directory. It may be absent
-     * when [defaultRules] is set; the check then runs on the default rules alone.
+     * when [baseRules] or [defaultRules] is set; the check then runs on those rule sets alone.
      */
     abstract val rulesFile: RegularFileProperty
 
@@ -30,8 +30,16 @@ abstract class ByterailsExtension {
     abstract val slices: ListProperty<String>
 
     /**
-     * Rule sets byterails ships, by id, applied on top of the rules file or instead of it.
-     * `hexagonal`: a `domain` package, in every slice or under the base package, that cannot have any
+     * Base rule sets, by id: what a language gives every class. `java` allows the Java standard
+     * library, `kotlin` the Kotlin one and the Java one it compiles to. Base rules apply to every
+     * package, one marked `isolated()` included. On the root project they reach the whole build; on a
+     * project with a [module] they apply under the module.
+     */
+    abstract val baseRules: ListProperty<String>
+
+    /**
+     * Default rule sets, by id: templates for an architecture, applied on top of the rules file or
+     * instead of it. `hexagonal`: a `domain` package, in every slice or under the base package, that cannot have any
      * external dependency. `hexagonalSpring`: the hexagonal layout of a sliced Spring Boot service, with
      * the application class and `config` under the base package. On a project with a [module], the sets
      * apply under the module.
@@ -42,7 +50,7 @@ abstract class ByterailsExtension {
      * The module this project is: a package relative to the base package, for example `orders`, that
      * this project's classes must live in and no other project may put classes in. The module's own
      * `byterails.kts`, see [moduleRulesFile], declares what lies under it, and every project's check
-     * loads the rules files of all modules. On a module project, [slices] and [defaultRules] belong to
+     * loads the rules files of all modules. On a module project, [slices], [baseRules] and [defaultRules] belong to
      * the module. Unset by default: the project is then checked against the root rules file alone.
      */
     abstract val module: Property<String>
@@ -50,7 +58,7 @@ abstract class ByterailsExtension {
     /**
      * The rules file of this [module], relative to the module. Defaults to `byterails.kts` in the
      * project directory and may be absent, in which case the module has the root rules and its
-     * default rules only. Ignored when [module] is unset.
+     * base and default rules only. Ignored when [module] is unset.
      */
     abstract val moduleRulesFile: RegularFileProperty
 

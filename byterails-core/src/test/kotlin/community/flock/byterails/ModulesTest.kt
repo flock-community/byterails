@@ -17,6 +17,7 @@ import community.flock.byterails.model.including
 import community.flock.byterails.model.withBasePackage
 import community.flock.byterails.model.withModules
 import community.flock.byterails.report.ConsoleReporter
+import community.flock.byterails.rules.BaseRuleSet
 import community.flock.byterails.rules.DefaultRuleSet
 import community.flock.byterails.validation.RuleSetValidator
 import java.io.File
@@ -158,8 +159,8 @@ class ModulesTest {
     }
 
     @Test
-    fun `the root rules of a module's default set reach its isolated packages, the module file's own do not`() {
-        val baseline = object : DefaultRuleSet("baseline", "a baseline", "is the baseline") {
+    fun `the base rules of a module reach its isolated packages, the module file's own rules do not`() {
+        val baseline = object : BaseRuleSet("baseline", "a baseline", "is the baseline") {
             override fun ByterailsBuilder.rules() {
                 allow("org.jetbrains.annotations")
             }

@@ -151,7 +151,7 @@ object ConsoleReporter {
         return lines
     }
 
-    /** One line per default rule set that appeared in an allows list, saying what its token stands for. */
+    /** One line per base or default rule set that appeared in an allows list, saying what its token stands for. */
     private fun legend(groups: List<ViolationGroup>): List<String> =
         groups.flatMap { it.ruleSets.entries }.distinctBy { it.key }.sortedBy { it.key }
             .map { (id, label) -> "byterails: [$id] stands for $label" }

@@ -4,12 +4,12 @@ import community.flock.byterails.dsl.ByterailsBuilder
 import community.flock.byterails.dsl.SliceBuilder
 
 /**
- * The `hexagonal` rule set: a `domain` package that cannot have any external dependency.
+ * The `hexagonal` default rule set: a `domain` package that cannot have any external dependency.
  *
  * With slices configured there is one in every slice, without there is one under the base package.
- * The package is isolated, so it inherits no allow a rules file wrote in the root block or an
- * enclosing declaration, and may reference only the language baseline, itself, and what the `java`
- * or `kotlin` set grants every package when one of them is applied.
+ * The package is isolated, so it inherits no allow from the root block or an enclosing declaration,
+ * and may reference only the language baseline, itself, and what the base rules grant every package:
+ * the standard library, when `java` or `kotlin` is applied.
  */
 object Hexagonal : DefaultRuleSet(
     id = "hexagonal",

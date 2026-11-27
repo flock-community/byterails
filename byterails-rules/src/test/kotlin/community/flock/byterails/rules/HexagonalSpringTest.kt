@@ -18,7 +18,8 @@ class HexagonalSpringTest {
 
     /** The build alone: kotlin plus the layout, two slices, base package `com.acme`. */
     private val fromBuild = RuleSet(emptyList(), emptyList())
-        .withDefaultRules(listOf("kotlin", "hexagonalSpring"), sliced = true)
+        .withBaseRules(listOf("kotlin"))
+        .withDefaultRules(listOf("hexagonalSpring"), sliced = true)
         .withSlices(listOf("orders", "customers"))
         .withBasePackage("com.acme")
 
@@ -69,7 +70,7 @@ class HexagonalSpringTest {
     fun `the domain is isolated and flat and allows the standard libraries and stereotypes`() {
         val model = declaration("com.acme.orders.domain.model")
         assertTrue(model.isolated && model.flat)
-        // The kotlin set applied next to the layout reaches the isolated domain too.
+        // The kotlin base rules reach the isolated domain too.
         val kotlin = listOf("kotlin", "org.jetbrains.annotations") + Java.STANDARD_LIBRARY
         assertEquals(kotlin + HexagonalSpring.DOMAIN_BASELINE, effective("com.acme.orders.domain.model").map { it.prefix.name })
         assertEquals(
